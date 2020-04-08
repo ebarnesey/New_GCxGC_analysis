@@ -1,0 +1,85 @@
+---
+title: "VOC_timeline"
+author: "Emily"
+date: "2/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(Rcpp)
+library(caret) # cross validation
+
+library(randomForest)
+library(gbm)
+
+
+library(nnet)
+library(ROCR)
+
+library(caTools)
+
+library(MASS)
+
+
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+
+#install.packages("grid")
+library(grid)
+
+#install.packages("OrgMassSpecR")
+library(OrgMassSpecR)
+
+#install.packages("glue")
+library(glue)
+
+library(openxlsx)
+
+#install.packages("janitor")
+library(janitor)
+
+library(rpart) # CART
+library(rpart.plot) # CART plotting
+
+#install.packages("CHNOSZ")
+library(CHNOSZ)
+
+library(readxl)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure}
+btztimeline <- read_csv("Benzo_timetable.csv")
+
+btztimeline <- read_excel("Benzo_timetable.xlsx", col_types = "guess")
+
+btztimeline %>% ggplot(aes(x = Date_time, y = ng_normalized_to_2000_ml_sample, color = Dark_light))+
+  geom_point()+
+  ggtitle("Benzothiazole Rough Timeline")
+
+btztimeline %>% ggplot(aes(x = Date_time, y = Limonene_norm, color = Dark_light))+
+  geom_point(pch = 3)+
+  geom_point(aes(x = Date_time, y = Carene_norm, color = Dark_light)) +
+  ggtitle("Limonene/Carene Rough Timeline")
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
