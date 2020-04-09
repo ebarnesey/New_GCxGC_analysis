@@ -147,7 +147,7 @@ M_t_full <- M_t_full %>%
 In the external processing software GCimage, each blob in each data file is assigned to its closest match within the template library, the field blank library, or the internal standard library, no matter how poor this match might be.  Given the chemical complexity and diversity of the samples analyzed, many sample blobs in any individual image are likely not legitimate matches to any of the established library. In this section, the analytes are separated from the internal standard and field blank compounds, and poorly matched analytes are separated from well matched analytes. Furthermore, as it is impossible for a single compound to appear more than once within a chromatogram (with the exception of tailing issues which create an artifact of an extremely small blob directly above a high volume blob), it is necessary that only the best match for each compound is preserved for time series analysis.
 ```{r match_finding, message =FALSE}
 # filtering out bad LRI matches
-Match_factor_floor <- 750
+Match_factor_floor <- 700
 Reverse_match_factor_floor <- 700
 LRI_diff_floor <- 10
 
@@ -417,6 +417,7 @@ testnn <- nn2(IS_pos_short, Analyte_pos_short, treetype = "kd", searchtype = "st
 Analyte_IS_Index <- testnn$nn.idx
 
 Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
 Analyte_with_IS <- Analyte_pos_ad %>% 
   mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
 
@@ -424,6 +425,27 @@ Analyte_with_IS_positions <- Analyte_with_IS %>%
   left_join(Analyte_positions) %>% 
   left_join(IS_positions_avg, by = c("IS_appropriate"= "Compound.Name"))
 
+M_t_analyte_withIS <- M_t_analyte_unique %>% 
+  left_join(Analyte_with_IS) %>% 
+  mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm= -999*(LRI.I/LRI.I))
+
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  
+  IS_name = M_t_analyte_withIS$IS_appropriate[i]
+  File_num_t = M_t_analyte_withIS$File_num[i]
+  
+  IS_indicated <- IS_stability %>% 
+    filter(Compound.Name == IS_name) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol[i] <-IS_indicated$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm[i] <-IS_indicated$IS_mean_norm[1]
+  
+  
+}
 
 
 ```
