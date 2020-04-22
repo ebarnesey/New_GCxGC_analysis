@@ -75,6 +75,12 @@ library(akima)
 library(openxlsx)
 library(class)
 library(RANN)
+
+install.packages("survival")
+
+library(survival)
+library(Hmisc)
+
 ```
 ### **Analysis Task 1: Importing and Tidying GC-Image Data**
 
@@ -350,6 +356,9 @@ IS_positions_avg <- IS_positions %>%
   left_join(IS_rt2)
 
 
+write.csv(IS_positions_avg, "IS_positions_avg.csv")
+
+
 IS_avg_vols <- IS_unique %>% 
   group_by(Compound.Name) %>% 
   summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
@@ -357,10 +366,17 @@ IS_avg_vols <- IS_unique %>%
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
   left_join(bt_sum)
+
+IS_cat <- read.csv("IS_withcat.csv")
+IS_cat <- IS_cat %>% 
+  dplyr::select(-X)
+
+IS_avg_vols <- IS_avg_vols %>% 
+  left_join(IS_cat)
   
 
 IS_just_one_IS <- IS_avg_vols %>% 
-  filter(Compound.Name == "dC26") %>% 
+  filter(Compound.Name == "perylene-d") %>% 
   dplyr::select(File_num, dalk_norm=IS_mean_norm) 
 
 IS_stability <- IS_avg_vols %>% 
@@ -368,7 +384,7 @@ IS_stability <- IS_avg_vols %>%
   left_join(IS_positions_avg)
 
 IS_stability %>% 
-  ggplot(aes(x = dalk_norm, y = IS_mean_norm, color = Retention.II..sec.))+
+  ggplot(aes(x = dalk_norm, y = IS_mean_norm, color = F_group_cat))+
   geom_point()+
   ylim(0, 2) +
   xlim(0,2)
@@ -379,6 +395,24 @@ IS_avg_vols %>% ggplot(aes(x = r_date, y = IS_med_norm, color = Compound.Name)) 
   geom_point()
   
 ```
+More testing of IS stability, but including compound categories- looking at correlation matrix of matrix/instrument performance effects
+```{r}
+IS_stab_onlyvol <- IS_stability %>% 
+  dplyr::select(Compound.Name, IS_mean_norm, File_num) %>% 
+  spread(key = Compound.Name, value = IS_mean_norm)
+
+IS_corrprep <- IS_stab_onlyvol %>% 
+  dplyr::select(-File_num)
+
+cor1 <- cor(IS_corrprep, use ="pairwise.complete.obs")
+round(cor1, 2)
+
+library("survival")
+library("Hmisc")
+cor2 <- rcorr(as.matrix(IS_corrprep))
+
+```
+
 
 
 ```{r IS_mapping}

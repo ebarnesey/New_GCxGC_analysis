@@ -1,0 +1,28 @@
+,Compound.Name,F_group_cat
+1,4-methoxy-benzaldehyde,OxyArom
+2,chrysene-d,PAH
+3,d-anthraquinone,OxyArom
+4,"d-C10 acid, TMS",Acid
+5,"d-C15 alcohol, TMS",Alcohol
+6,"d-C22 acid, TMS",Acid
+7,d-C6diacid,Acid
+8,d-cholestane,Other
+9,d-cholesterol,Other
+10,d-pyrene,PAH
+11,dC14,Alkane
+12,dC16,Alkane
+13,dC18,Alkane
+14,dC20,Alkane
+15,dC22,Alkane
+16,dC24,Alkane
+17,dC26,Alkane
+18,dC28,Alkane
+19,dC30,Alkane
+20,dC32,Alkane
+21,dC34,Alkane
+22,dC36,Alkane
+23,dibenzanthracene-d,PAH
+24,glucose-13C6,Sugar
+25,methoxyphenol-d3,OxyArom
+26,pentaerythritol-C13,Alcohol
+27,perylene-d,PAH

@@ -623,6 +623,14 @@ M_t_analyte_unique_IS <- M_t_analyte_unique %>%
 ```
 Note- moving forward, before doing the correction between ES and sample, must train a GAM on everything- both the sample and the ES (cant do just one)
 
+
+## Trying the internal standard nearest normalized by the average of that IS
+```{r}
+IS_positions_avg <- read.csv("IS_positions_avg.csv")
+
+```
+
+
 ## Loading External Standard
 
 Next the External standard calibration point information must be added into the processed blob files and reformatted for future modeling. Additionally, cal curves must be plotted to identify problematic points. 
@@ -1786,3 +1794,12 @@ Notes on future steps:
 try k nearest neighbors
 but kmeans miht be better with small dataset
 take slope of predicted based on the random forest- will be better, more data
+
+## Now trying with a normalized by normalized IS version
+
+```{r}
+
+
+
+```
+
