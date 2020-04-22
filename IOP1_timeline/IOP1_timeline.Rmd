@@ -428,7 +428,7 @@ Analyte_with_IS_positions <- Analyte_with_IS %>%
 M_t_analyte_withIS <- M_t_analyte_unique %>% 
   left_join(Analyte_with_IS) %>% 
   mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
-  mutate(IS_mean_norm= -999*(LRI.I/LRI.I))
+  mutate(IS_mean_norm= -999*(LRI.I/LRI.I)) 
 
 
 for(i in 1:nrow(M_t_analyte_withIS)){
@@ -447,6 +447,8 @@ for(i in 1:nrow(M_t_analyte_withIS)){
   
 }
 
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(vol_is_normnorm = Volume/IS_mean_norm)
 
 ```
 
