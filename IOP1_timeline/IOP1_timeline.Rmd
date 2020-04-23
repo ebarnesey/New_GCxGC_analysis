@@ -76,11 +76,17 @@ library(openxlsx)
 library(class)
 library(RANN)
 
-install.packages("survival")
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
 
 library(survival)
 library(Hmisc)
-
+#install.packages("installr")
+#library(installr)
 ```
 ### **Analysis Task 1: Importing and Tidying GC-Image Data**
 
@@ -154,11 +160,14 @@ In the external processing software GCimage, each blob in each data file is assi
 ```{r match_finding, message =FALSE}
 # filtering out bad LRI matches
 Match_factor_floor <- 700
-Reverse_match_factor_floor <- 700
+Reverse_match_factor_floor <- 100
 LRI_diff_floor <- 10
 
-fb_match_factor_floor <- 700
-fb_reverse_match_factor_floor <- 600
+
+
+
+fb_match_factor_floor <- 600
+fb_reverse_match_factor_floor <- 100
 IS_lib_name <- "amzi0503_b"
 FB_lib_name <- "amz_fb_trimmed"
 
@@ -170,13 +179,13 @@ M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I))
 # identifying the internal standard
 IS_goodmatch <- M_t_LRI %>% 
   filter(Library.Name == IS_lib_name) %>% 
-  filter(LRI_diff < LRI_diff_floor-5) %>% 
-  filter(Library.Match.Factor > Match_factor_floor || Library.Reverse.Match.Factor > Reverse_match_factor_floor | Compound.Name == "methoxyphenol-d3")  
+  filter(LRI_diff < LRI_diff_floor) %>% 
+  filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "methoxyphenol-d3")  
 
 FB_goodmatch <- M_t_LRI %>% 
   filter(Library.Name == FB_lib_name) %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
-  filter(Library.Match.Factor > fb_match_factor_floor || Library.Reverse.Match.Factor > fb_reverse_match_factor_floor)
+  filter(Library.Match.Factor > fb_match_factor_floor)
 
 M_t_all_analytes <- M_t_LRI %>% 
   anti_join(IS_goodmatch) %>% 
@@ -184,10 +193,11 @@ M_t_all_analytes <- M_t_LRI %>%
 
   
 M_t_analyte_unique <- M_t_all_analytes %>% 
-  filter(Library.Name != "amzi0503_b") %>% 
-  filter(Library.Name != "fb_amz_compiled_t") %>% 
+  filter(Library.Name != IS_lib_name) %>% 
+  filter(Library.Name != FB_lib_name) %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
-  filter(Library.Match.Factor > Match_factor_floor || Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
+  filter(Library.Match.Factor > Match_factor_floor) %>% 
+  filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
   arrange(desc(Volume)) %>% 
   arrange(Compound.Name) %>% 
   arrange(File_num) %>% 
@@ -304,6 +314,8 @@ M_t_analyte_summary %>%
   geom_boxplot(fill = "pink") + 
   theme_bw()+
   ylab("Percent of Analyte Volume Assigned to \nLibrary Match")
+
+summary(M_t_analyte_summary$perct_volfound)
 
 #weighted average of distances
 #leave one out cross validation
