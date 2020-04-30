@@ -75,6 +75,8 @@ library(akima)
 library(openxlsx)
 library(class)
 library(RANN)
+library("survival")
+library("Hmisc")
 
 
 #install.packages("survival")
@@ -93,7 +95,7 @@ library(Hmisc)
 In this section, I write a series of functions to import my files based on a table of contents that lists each file name along with descriptive data regarding each sample, such as the time at which it was collected, the quantity of filter material used, and the type of sample (field blank, calibration curve, or sample). I associate the information in the index table with each measurement of each analyte in every sample and vertically concatenate to create a long dataframe such that each row is a single observation of a single analyte. 
 
 
-```{r timeline_testing, warning = FALSE}
+```{r timeline_testing, warning = FALSE, echo = FALSE, message = FALSE}
 #reading in the index of the blob tables
 bt_sum <- read_csv("Blob_table_summary_JustSample.csv")
 
@@ -174,11 +176,12 @@ FB_lib_name <- "amz_fb_trimmed"
 rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
 
 # creating a column of the differences in linear retention indecies so that poor matches can be screened out
-M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) 
+M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
+  mutate(LRI_diff = replace_na(LRI_diff, -999))
 
 # identifying the internal standard
 IS_goodmatch <- M_t_LRI %>% 
-  filter(Library.Name == IS_lib_name) %>% 
+  filter(Library.Name == IS_lib_name | Library.Name == "-") %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
   filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "methoxyphenol-d3")  
 
@@ -187,9 +190,23 @@ FB_goodmatch <- M_t_LRI %>%
   filter(LRI_diff < LRI_diff_floor) %>% 
   filter(Library.Match.Factor > fb_match_factor_floor)
 
-M_t_all_analytes <- M_t_LRI %>% 
-  anti_join(IS_goodmatch) %>% 
+FB_okmatch <- M_t_LRI %>% 
+  filter(Library.Name == FB_lib_name) %>% 
+  filter(Library.Match.Factor> fb_match_factor_floor-100) %>% 
   anti_join(FB_goodmatch)
+  
+IS_okmatch <- M_t_LRI %>% 
+  filter(Library.Name == IS_lib_name | Library.Name == "-") %>%
+  filter(Library.Match.Factor > Match_factor_floor-100 | Compound.Name == "methoxyphenol-d3")  %>% 
+  anti_join(IS_goodmatch)
+  
+
+M_t_all_analytes <- M_t_LRI %>% 
+  anti_join(FB_goodmatch) %>% 
+  anti_join(IS_goodmatch) %>% 
+  anti_join(FB_okmatch) %>% 
+  anti_join(IS_okmatch)
+
 
   
 M_t_analyte_unique <- M_t_all_analytes %>% 
@@ -364,7 +381,7 @@ IS_rt2 <- IS_positions_12030456 %>%
 
 IS_positions_avg <- IS_positions %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg_all = mean(LRI_avg)) %>% 
+  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE)) %>% 
   left_join(IS_rt2)
 
 
@@ -419,9 +436,12 @@ IS_corrprep <- IS_stab_onlyvol %>%
 cor1 <- cor(IS_corrprep, use ="pairwise.complete.obs")
 round(cor1, 2)
 
-library("survival")
-library("Hmisc")
+
 cor2 <- rcorr(as.matrix(IS_corrprep))
+
+corr_table_IS<- cor2$r
+
+write.csv(corr_table_IS, file = "IOP1_internalstandard_correlation_matrix2.csv")
 
 ```
 
@@ -431,20 +451,23 @@ cor2 <- rcorr(as.matrix(IS_corrprep))
 LRI_weight = 1
 LRII_weight = 1
 
-LRI1_avg = mean(IS_positions_avg$LRI_avg_all)
+LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
 LRI2_avg = mean(IS_positions_avg$Retention.II..sec.)
 
 IS_positions_avg <- IS_positions_avg %>% 
-  mutate(relative_LRI = LRI_avg_all/LRI1_avg) %>% 
-  mutate(relative_LRI2 = Retention.II..sec./LRI2_avg)
+  mutate(relative_LRI = (LRI_avg_all/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (Retention.II..sec./LRI2_avg)*LRII_weight)
 
 Analyte_positions_trial <- M_t_analyte_unique %>% 
   group_by(Compound.Name, File_num) %>% 
   summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
 
+# note filtering out three small blobs outside of RI window
+
 Analyte_positions <- M_t_analyte_unique %>% 
+  filter(!is.na(LRI.I)) %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = min(Retention.II..sec. - rt2_floor))
 
 Analyte_positions <- Analyte_positions %>% 
   mutate(relative_LRI = LRI_avg/LRI1_avg) %>% 
@@ -458,7 +481,7 @@ IS_pos_short <- IS_positions_avg %>%
 
 #knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
 
-testnn <- nn2(IS_pos_short, Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
 
 Analyte_IS_Index <- testnn$nn.idx
 
@@ -494,7 +517,8 @@ for(i in 1:nrow(M_t_analyte_withIS)){
 }
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
-  mutate(vol_is_normnorm = Volume/IS_mean_norm)
+  mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+  
 
 ```
 
