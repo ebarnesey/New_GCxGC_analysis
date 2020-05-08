@@ -347,6 +347,80 @@ summary(M_t_analyte_summary$perct_volfound)
 The results of the library evaluation are promising, but reveal room for improvement.  Despite the fact that only 55% of the analyte compounds in each image match the library, the highest volume compounds are well traced- an average of 86% of total instrument response (used as a proxy for recovered mass) is traced in each image, and even the least well described file has 82% coverage.  The goal of 90% coverage has not been achieved, but as a first draft the library has exceeded expectations for achieving broad coverage. 
 The histogram reveals that continuous tracking of compounds across the entire time series has not been fully achieved- while ~300 compounds were identified in all of the samples, another ~300 were identified in only 1 or 2 samples.  While samples are inconsistent and it is unsurprising that many compounds are either not present or present below detection limits in certain samples, the high number of compounds occuring in only one or two samples may indicate that there may be duplicate entries in the compound library. Additionally, as the graph *Average Blob Volume by Match Frequency* and the histogram of matched blobs llustrate, there are are a relatively high number of high volume peaks that appear to be present in ~half or fewer of the samples.  While it is possible for a compound to be present in high quantities in some samples and below detection limits in others, the frequency of these samples occuring at around half of the number of samples tested points to the possibility that some high volume blobs are being split between multiple duplicate mass spectral entries in the library. The compounds that occur in only a few samples should be investigated to determine whether they are low abundance compounds which are not present in other samples or whether there are duplicate entries of compounds leading to split assignments.  
 
+### For Lindsay: graphing unique compounds in various ways
+
+```{r}
+
+IOP1_btsum <- bt_sum %>% 
+  filter(IOP == 1) %>% 
+  mutate(n_unique_sampleprior = 0) %>% 
+  mutate(n_overlap_sampleprior= 0) %>% 
+  mutate(cumulative_unique = 0) 
+
+unique_tracing <- M_t_analyte_unique %>% 
+  arrange(r_date)
+
+unique_tag <- 
+  unique_tracing %>% 
+  filter(File_num == IOP1_btsum$File_num[1]) %>% 
+  mutate(is_unique_prior = NA) %>% 
+  dplyr::select(Compound.Name, File_num, is_unique_prior)
+
+
+for(i in 2:nrow(IOP1_btsum)){
+  
+  
+  
+  previous_file_i <- IOP1_btsum$File_num[i-1]
+  file_i <- IOP1_btsum$File_num[i]
+  
+  prev_compounds <- unique_tracing %>% 
+    filter(File_num == previous_file_i) %>% 
+    mutate(is_unique_prior = FALSE) %>% 
+    dplyr::select(Compound.Name, is_unique_prior)
+  
+  compounds_i <- unique_tracing %>% 
+    filter(File_num== file_i)
+  
+  
+  unique_tag_t <- compounds_i %>% 
+    left_join(prev_compounds, by = "Compound.Name") %>% 
+    dplyr::select(Compound.Name, File_num, is_unique_prior)
+  
+  unique_tag <- rbind(unique_tag, unique_tag_t)
+    
+  
+}
+
+unique_tracing_c <- unique_tracing %>% 
+  left_join(unique_tag, by = c("Compound.Name", "File_num")) %>% 
+  mutate(unique_log = is.na(is_unique_prior))
+
+
+
+```
+
+```{r}
+unique_tracing_c %>% 
+  mutate(ones = 1) %>% 
+  ggplot(aes(fill = unique_log, y = ones, x = r_date))+
+  geom_bar(position = "stack", stat = "identity")+
+  ylab("Analyte Count")
+
+
+unique_tracing_c %>% 
+  mutate(ones = 1) %>% 
+  ggplot(aes(fill = unique_log, y = Volume, x = r_date))+
+  geom_bar(position = "stack", stat = "identity")+
+  ylab("Analyte Raw Volume")
+```
+
+ggplot(data, aes(fill=condition, y=value, x=specie)) + 
+    geom_bar(position="stack", stat="identity") +
+    scale_fill_viridis(discrete = T) +
+    ggtitle("Studying 4 species..") +
+    theme_ipsum() +
+    xlab("")
 ### **Analysis Task 4: Internal Standard Organisation and Normalization**
 
 
@@ -405,7 +479,7 @@ IS_avg_vols <- IS_avg_vols %>%
   
 
 IS_just_one_IS <- IS_avg_vols %>% 
-  filter(Compound.Name == "perylene-d") %>% 
+  filter(Compound.Name == "dC24") %>% 
   dplyr::select(File_num, dalk_norm=IS_mean_norm) 
 
 IS_stability <- IS_avg_vols %>% 
@@ -423,6 +497,9 @@ IS_stability %>%
 IS_avg_vols %>% ggplot(aes(x = r_date, y = IS_med_norm, color = Compound.Name)) +
   geom_point()
   
+
+IS_avg_vols %>% ggplot(aes(x = r_date, y = Volume_tot, color = Compound.Name)) +
+  geom_point()
 ```
 More testing of IS stability, but including compound categories- looking at correlation matrix of matrix/instrument performance effects
 ```{r}
@@ -518,9 +595,11 @@ for(i in 1:nrow(M_t_analyte_withIS)){
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+  mutate(vol_is_rawnorm = Volume/IS_vol)
   
 
 ```
+
 
 
 ```{r IS_mapping}
@@ -646,9 +725,9 @@ test_gam_all %>%
 ```
 
 Each sample was doped with the same quantity of internal standard at the same concentration. While matrix effects may cause greater recovery of internal standard compounds on the more highly loaded samples, these effects should not cause the recovery of any compound to vary beyond a certain tolerance.  Some compounds, such as 13C glucose, are chemically similar to analyte compounds that are frequently present in high concentrations.  The possibility of eliminating outliers of individual measurements as well as discarding compounds with inconsistent recovery (most likely 13C glucose or C15 alcohol based on the spreads illustrated in the boxplot) should be assessed.  
-```{r}
+```{r fig.width=15, fig.height=6}
 ## add a column to the master list of unique analytes which is the internal standard normalized volume at each point in time
-M_t_analyte_unique_IS <- M_t_analyte_unique %>% 
+M_t_analyte_unique_IS <- M_t_analyte_withIS %>% 
   mutate(IS_glm =  exp(predict.gam(IS_gam2b, data.frame(Fac = as.factor(File_num), x = LRI.I, z = Retention.II..sec.)))) %>% 
   mutate(Vol_norm_GLM = Volume/IS_glm)
 
@@ -658,10 +737,13 @@ lev_check <- M_t_analyte_unique_IS %>%
 M_t_total_vol_date <- bt_sum %>% 
   left_join(M_t_all_analytes_volcount)
 
+M_t_total_vol_date_IOP1 <- M_t_total_vol_date %>% 
+  filter(IOP == 1)
+
 lev_check %>% ggplot(aes(x = r_date, y = Volume/max(Volume), color = "blue"))+
   geom_line()+
   geom_line(aes(x = r_date, y = Vol_norm_GLM/max(Vol_norm_GLM), color = "red"))+
-  geom_line(data = M_t_total_vol_date, aes(x = r_date, y = rawvol/max(rawvol), color = "black"))+
+  geom_line(data = M_t_total_vol_date_IOP1, aes(x = r_date, y = rawvol/max(rawvol), color = "black"))+
   xlab(NULL)+
   ylab("Instrument Response- Fraction of Max")+
   labs(title = "Comparison of Raw and GLM-normalized Timelines of Levoglucosan")+
@@ -670,26 +752,149 @@ lev_check %>% ggplot(aes(x = r_date, y = Volume/max(Volume), color = "blue"))+
   ylim(.2, 1.1)
 
 
+lev_check %>% ggplot(aes(x = r_date, y = Volume, color = "blue"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = Vol_norm_GLM/max(Vol_norm_GLM), color = "red"))+
+  geom_line(data = M_t_total_vol_date_IOP1, aes(x = r_date, y = rawvol/max(rawvol), color = "black"))+
+  xlab(NULL)+
+  ylab("Instrument Response- Fraction of Max")+
+  labs(title = "Comparison of Raw and GLM-normalized Timelines of Levoglucosan")+
+  scale_colour_manual( name = '',
+         values =c('blue'='blue', 'red' = 'red', 'black'='black'), labels = c('Total Analyte Volume', 'Raw Instrument Response','GLM-normalized Instrument Response'), guide = 'legend')+
+  ylim(.2, 1.1)
+
+lev_check %>% ggplot(aes(x = r_date, y = Volume, color = "blue"))+
+  geom_line()
+
+lev_check %>% ggplot(aes(x = r_date, y = Volume/Filter_punches, color = "blue"))+
+  geom_line()
+
+lev_check %>% ggplot(aes(x = r_date, y = vol_is_rawnorm/Filter_punches, color = "blue"))+
+  geom_line()
+
+lev_check %>% ggplot(aes(x = r_date, y = vol_is_normnorm/Filter_punches, color = "blue"))+
+  geom_line()
+
 # not sure whether I trust the GLM method yet so will be proceeding with raw volumes for farther analysis, but raw volumes are good to know
 
 ```
 
 This graph highlights one of the purposes of the internal standard- correcting for matrix effects.  The overall aerosol concentration is anticorrelated with the levoglucosan concentration- overall aerosol concentrations tend to be slightly higher during the day, while levoglucosan is highest at night.  This means that instrument recovery of levoglucosan during the day is artificially enhanced by the presence of a high abundance of other compounds, while recovery at night is suppressed by the scarcity of other compounds.  The GLM method of internal standard corrects for this- the profile stays the same, but the peaks and valleys are slightly enhanced to more accurately reflect variations in levoglucosan throughout the test period.  
 
+## Making correlation tables
+
+```{r}
+# normalized by the normalized internal standard
+for_Corr_is_normnorm <- M_t_analyte_unique_IS %>% 
+  mutate(vol_is_normnorm = vol_is_normnorm/Filter_punches) %>% 
+  dplyr::select(Compound.Name, vol_is_normnorm, File_num) %>% 
+  spread(key = Compound.Name, value = vol_is_normnorm) %>% 
+  select(-File_num)
+
+cor_IS_normnorm <- rcorr(as.matrix(for_Corr_is_normnorm))
+
+corr_table_IS_normnorm<- cor_IS_normnorm$r
+
+write.csv(corr_table_IS_normnorm, file = "IOP1_correlation_matrix_ISnormnorm.csv")
+
+# normalized by GLM
+for_Corr_glm_normnorm <- M_t_analyte_unique_IS %>% 
+   mutate(Vol_norm_GLM = Vol_norm_GLM/Filter_punches) %>% 
+  dplyr::select(Compound.Name, Vol_norm_GLM, File_num) %>% 
+  spread(key = Compound.Name, value = Vol_norm_GLM) %>% 
+  select(-File_num)
+
+cor_glm_norm <- rcorr(as.matrix(for_Corr_glm_normnorm))
+
+corr_table_glm_norm<- cor_glm_norm$r
+
+write.csv(corr_table_glm_norm, file = "IOP1_correlation_matrix_GLMnorm.csv")
+
+# directly normalized by IS
+for_Corr_IS_norm <- M_t_analyte_unique_IS %>% 
+   mutate(vol_is_rawnorm = vol_is_rawnorm/Filter_punches) %>% 
+  dplyr::select(Compound.Name, vol_is_rawnorm, File_num) %>% 
+  spread(key = Compound.Name, value = vol_is_rawnorm) %>% 
+  select(-File_num)
+
+cor_is_norm <- rcorr(as.matrix(for_Corr_IS_norm))
+
+corr_table_is_norm<- cor_is_norm$r
+
+write.csv(corr_table_is_norm, file = "IOP1_correlation_matrix_ISnorm.csv")
+
+Corr_comp_ISnormnorm_ISrawnorm <- abs(corr_table_is_norm-corr_table_IS_normnorm)
+
+Corr_comp_GLM_ISrawnorm <- abs(corr_table_is_norm-corr_table_glm_norm)
+
+write.csv(Corr_comp_GLM_ISrawnorm, file = "IOP1_correlation_matrix_comparison_ISrawnorm_GLM.csv")
+
+install.packages("plot.matrix")
+library(plot.matrix)
+
+plot(as.matrix(Corr_comp_ISnormnorm_ISrawnorm))
+
+
+
+```
+## Visualizing timelines
+
+## Cumulative dist using IS normalized vol
+
+```{r}
+analyte_cumsum <- M_t_analyte_unique_IS %>% 
+  group_by(Compound.Name) %>% 
+  summarise(sum_rawvol = sum(Punch_norm_vol, na.rm = TRUE), sum_ISrawnormvol = sum(vol_pnorm_israwnorm, na.rm = TRUE), sum_ISnormnormvol = sum(vol_pnorm_is_normnorm, na.rm = TRUE)) %>% 
+  arrange(desc(sum_rawvol)) %>% 
+  tibble::rowid_to_column("Rownum") %>% 
+  dplyr::select(Compound.Name, Rownum, sum_rawvol, sum_ISrawnormvol, sum_ISnormnormvol) %>% 
+  mutate(cumsum_raw = sum_rawvol/sum(sum_rawvol), cumsum_ISrawnorm = sum_ISrawnormvol/sum(sum_ISrawnormvol), num_pct = Rownum/nrow(analyte_cumsum), cumsum_ISnormnorm = sum_ISnormnormvol/sum(sum_ISnormnormvol)) %>% 
+  mutate(raw_cumsum= cumsum_raw)
+
+for(i in 2:nrow(analyte_cumsum)){
+  analyte_cumsum$raw_cumsum[i]= analyte_cumsum$raw_cumsum[i]+analyte_cumsum$raw_cumsum[i-1]
+  
+}
+  
+
+
+analyte_cumsum %>% 
+  ggplot(aes(x = num_pct, y = raw_cumsum))+
+  geom_point()
+
+analyte_cumsum %>% 
+  ggplot(aes(x = Rownum, y = raw_cumsum))+
+  geom_point()+
+  xlab("Number of Compounds")+
+  ylab("Percent of Tracked Analyte Volume")
+  
+
+
+```
+ggplot(df, aes(x)) + stat_ecdf(geom = "step")
+
+
 ###**Bonus: Visualizing Data, Illustrating How Time-Series Will Be Utilized in Future**
 
 In this section I play with different ways of visualizing the data.  As I have created timelines for 1,400+ compounds varying in response over multiple orders of magnitude, illustrating all timelines in one graph provides little useful information.  In this section I subset compounds into those which occur in all of the samples and examine those which display a high degree of diurnal variation.  I also associate information regarding which compounds are known to serve as a point of reference for unknown compounds.
 
 ```{r graphing}
+
+
 Known_comp <- read_csv("Known_compounds.csv")
 
-# adding column to indicate the compounds for which we know the identity
-M_t_analyte_unique <- M_t_analyte_unique %>% 
+# adding column to indicate the compounds for which we know the identity, aditn columns of the punch number normalized IS normalized volumes for plotting
+M_t_analyte_unique_IS <- M_t_analyte_unique_IS %>% 
   left_join(Known_comp) %>% 
-  replace_na(list(Compound = "Unknown")) 
+  replace_na(list(Compound = "Unknown")) %>% 
+  mutate(vol_pnorm_israwnorm = vol_is_rawnorm/Filter_punches) %>% 
+  mutate(vol_pnorm_GLMnorm = Vol_norm_GLM/Filter_punches) %>% 
+  mutate(vol_pnorm_is_normnorm = vol_is_normnorm/Filter_punches)
+
+# means of determining which vool metric to use
 
 # subset of compounds that appear in every sample
-Only_all <- M_t_analyte_unique %>% 
+Only_all <- M_t_analyte_unique_IS %>% 
   filter(comp.n == max(comp.n))
 
 avg_vols <- Only_all %>% 
@@ -708,7 +913,11 @@ avg_night_vol <- Only_all %>%
 
 Max_vol <- Only_all %>% 
   group_by(Compound.Name) %>% 
-  summarize(max_vol = max(Volume))
+  summarise(max_vol = max(Volume))
+
+mean_vol_isnorm <- Only_all %>% 
+  group_by(Compound.Name) %>% 
+  summarise(meanvol_isnormnorm = mean(vol_pnorm_is_normnorm), meanvol_glmnorm = mean(vol_pnorm_GLMnorm), meanvol_israwnorm = mean(vol_pnorm_israwnorm) )
 
 # creating dataframe with only the compounds that appeared in all samples, also creating columns tracking whether compounds are more prevalent in the day or at night as well as the degree to which they show a diurnal pattern
 Only_all <- Only_all %>% 
@@ -716,6 +925,7 @@ Only_all <- Only_all %>%
   left_join(avg_day_vol) %>% 
   left_join(avg_night_vol) %>% 
   left_join(Max_vol) %>% 
+  left_join(mean_vol_isnorm) %>% 
   mutate(Day_dom = avgdayvol - avgnightvol) %>% 
   mutate(Day_night_diff = abs(Day_dom)) %>% 
   mutate(Day_night_diff_pct = Day_night_diff/avgdayvol) %>% 
@@ -731,31 +941,46 @@ Only_all_high <- Only_all %>%
 
 
 Only_all_low <- Only_all %>% 
-  filter(avgvol < 400)
+  filter(avgvol < 8000)
  
 # Only_all_low %>% 
 #   ggplot(aes(x = r_date, y = Volume, color = Compound.Name)) +
 #   geom_line()
 
 Only_all_low_dndiff <- Only_all_low %>% 
-  filter(Day_night_diff_pct > .5)
+  filter(Day_night_diff_pct > .3)
 
 Only_all_high_dndiff <- Only_all_high %>% 
   filter(Day_night_diff_pct > .4)
 
-Only_all_low_dndiff %>% 
-  ggplot(aes(x = r_date, y = Volume, colour = Compound.Name)) +
+Only_all_low %>% 
+  ggplot(aes(x = r_date, y = vol_pnorm_israwnorm, colour = Compound.Name)) +
   geom_line()+
+  geom_line(aes(x = r_date, y = vol_pnorm_GLMnorm))+
   xlab(NULL)+
-  ylab("Raw Response")+
+  ylab("Responses normalized, 2 methods")+
   labs(title = "Timelines of Low Abundance Compounds Exhibiting Strong Diurnal Variability")
 
-Only_all_high_dndiff %>% 
-  ggplot(aes(x = r_date, y = Volume, colour = Compound.Name)) +
+Only_all_high %>% 
+  ggplot(aes(x = r_date, y = vol_pnorm_israwnorm, colour = Compound.Name)) +
   geom_line()+
+  geom_line(aes(x = r_date, y = vol_pnorm_GLMnorm))+
   xlab(NULL)+
   ylab("Raw Response")+
   labs(title = "Timelines of  High Abindance Compounds Exhibiting Strong Diurnal Variability")
+
+#install.packages("tidyquant")
+library(tidyquant)
+# comparing the time series with different norm schemes
+Only_all_high %>% 
+  ggplot(aes(x = r_date, y = vol_pnorm_israwnorm/meanvol_israwnorm, color = "red")) +
+  geom_line()+
+  geom_line(aes(x = r_date, y = vol_pnorm_GLMnorm/meanvol_glmnorm, color = "blue"))+
+  #geom_line(aes(x = r_date, y = vol_pnorm_is_normnorm/meanvol_isnormnorm, color = "green"))+
+  xlab(NULL)+
+  ylab("Raw Response")+
+  coord_x_date(xlim=c("2014-03-04", "2014-03-15"))+
+  labs(title = "Timelines of  High Abindance Compounds Exhibiting Strong Diurnal Variability- Normalization methods comparison")
 
 
 High_dndiff_2 <- Only_all_high_dndiff
