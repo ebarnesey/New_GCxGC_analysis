@@ -394,9 +394,11 @@ for(i in 2:nrow(IOP1_btsum)){
 
 unique_tracing_c <- unique_tracing %>% 
   left_join(unique_tag, by = c("Compound.Name", "File_num")) %>% 
-  mutate(unique_log = is.na(is_unique_prior))
+  mutate(unique_log = is.na(is_unique_prior)) %>% 
+  mutate(unique_vol = unique_log * Volume)
 
 
+avg_unique = sum(unique_tracing_c$unique_vol)/sum(unique_tracing_c$Volume)
 
 ```
 
@@ -412,7 +414,15 @@ unique_tracing_c %>%
   mutate(ones = 1) %>% 
   ggplot(aes(fill = unique_log, y = Volume, x = r_date))+
   geom_bar(position = "stack", stat = "identity")+
-  ylab("Analyte Raw Volume")
+  ylab("Analyte Raw Volume")+
+  xlab("Wet Season GoAmazon Date")+
+  scale_fill_manual(name = "Unique Compared\n to Previous Sample", values=c("blue", "green"))+
+  theme(axis.text.x = element_text(size=14), axis.text.y = element_text(size=14), axis.text=element_text(size=12),
+        axis.title=element_text(size=14))
+  
+  
+
+
 ```
 
 ggplot(data, aes(fill=condition, y=value, x=specie)) + 
@@ -874,6 +884,52 @@ analyte_cumsum %>%
 ggplot(df, aes(x)) + stat_ecdf(geom = "step")
 
 
+```{r, warning= FALSE, message= FALSE}
+corr_mat_named <- read.csv("IOP1_correlation_matrix_ISnormnorm_named.csv")
+
+analyte_sum_withcorr <- analyte_cumsum %>% 
+  left_join(corr_mat_named)
+
+tot_vol <- sum(analyte_sum_withcorr$sum_rawvol)
+
+analyte_sum_withcorr_bbOA <- analyte_sum_withcorr %>% 
+  filter(X1202_1412_blob_1 > .7)
+
+bboa_vol <- sum(analyte_sum_withcorr_bbOA$sum_rawvol)
+
+analyte_sum_withcorr_mtsoa <- analyte_sum_withcorr %>% 
+  filter(X1221_0832_blob_5 > .7)
+
+mtoa_vol <- sum(analyte_sum_withcorr_mtsoa$sum_rawvol)
+
+analyte_sum_withcorr_sqsoa <- analyte_sum_withcorr %>% 
+  filter(X1202_1412_blob_766 > .7)
+
+sqvol_vol <- sum(analyte_sum_withcorr_sqsoa$sum_rawvol)
+
+overlap_bboa_mtsoa <- analyte_sum_withcorr_bbOA %>% 
+  inner_join(analyte_sum_withcorr_mtsoa)
+
+bboa_mtsoa_overlap = sum(overlap_bboa_mtsoa$sum_rawvol) 
+
+overlap_sqsoa_mtsoa <- analyte_sum_withcorr_mtsoa %>% 
+  inner_join(analyte_sum_withcorr_sqsoa)
+
+sqsoa_mtsoa_overlap = sum(overlap_sqsoa_mtsoa$sum_rawvol) 
+
+bboa_vol/tot_vol
+
+mtoa_vol/tot_vol
+
+sqvol_vol/tot_vol
+
+bboa_mtsoa_overlap/tot_vol
+
+sqsoa_mtsoa_overlap/tot_vol
+
+.18+.231-.024-.015-.0066
+```
+
 ###**Bonus: Visualizing Data, Illustrating How Time-Series Will Be Utilized in Future**
 
 In this section I play with different ways of visualizing the data.  As I have created timelines for 1,400+ compounds varying in response over multiple orders of magnitude, illustrating all timelines in one graph provides little useful information.  In this section I subset compounds into those which occur in all of the samples and examine those which display a high degree of diurnal variation.  I also associate information regarding which compounds are known to serve as a point of reference for unknown compounds.
@@ -1018,6 +1074,9 @@ Strong_diurnal_2 <- rbind(Lev_scaled_down, Strong_diurnal) %>%
   filter(Compound != "Levoglucosan")
   
 
+
+```
+```{r}
 
 ```
 

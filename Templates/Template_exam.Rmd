@@ -1,0 +1,189 @@
+---
+title: "Template_Exam"
+author: "Emily"
+date: "5/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+```
+
+
+```{r}
+bt_sum_temp <- read_csv("template_summary.csv")
+
+make_file_name_t <- function(date_string) {
+  file_start <- "blobtables/"
+  file_end <- ""
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
+bt_sum_f <- bt_sum_temp %>% 
+  filter(type == "self_searched")
+
+bt_sum_ES <- bt_sum_temp %>% 
+  filter(type == "ES_searched")
+
+bt_sum_nist <- bt_sum_temp %>% 
+  filter(type == "NISTmain_searched")
+
+M_t_f <- read.csv(paste("blobtables/", bt_sum_f$Fi_name[1], sep = "")) %>% 
+  mutate(file_name = bt_sum_f$Template_File_Names[1])
+
+for (i in 2:nrow(bt_sum_f)){
+ fi_name_s <- paste("blobtables/", bt_sum_f$Fi_name[i], sep = "")
+ 
+ tt <- read.csv(fi_name_s) %>% 
+   mutate(file_name = bt_sum_f$Template_File_Names[i])
+
+ Mnew_t <- rbind(M_t_f, tt)
+ M_t_f <- Mnew_t
+ 
+ 
+}
+
+M_t_ES <- read.csv(paste("blobtables/", bt_sum_ES$Fi_name[1], sep = "")) %>% 
+  mutate(file_name = bt_sum_ES$Template_File_Names[1]) %>% 
+  mutate(ES_Compound.Name = Compound.Name) %>% 
+  mutate(ES_match_factor = Library.Match.Factor) %>% 
+  dplyr::select(BlobID, file_name, ES_Compound.Name, ES_match_factor)
+
+for (i in 2:nrow(bt_sum_ES)){
+ fi_name_s <- paste("blobtables/", bt_sum_ES$Fi_name[i], sep = "")
+ 
+ tt <- read.csv(fi_name_s) %>% 
+   mutate(file_name = bt_sum_ES$Template_File_Names[i]) %>% 
+  mutate(ES_Compound.Name = Compound.Name) %>% 
+  mutate(ES_match_factor = Library.Match.Factor) %>% 
+  dplyr::select(BlobID, file_name, ES_Compound.Name, ES_match_factor)
+
+ Mnew_t_es <- rbind(M_t_ES, tt)
+ M_t_ES <- Mnew_t_es
+ 
+ 
+}
+
+M_t_nist <- read.csv(paste("blobtables/", bt_sum_nist$Fi_name[1], sep = "")) %>% 
+  mutate(file_name = bt_sum_nist$Template_File_Names[1]) %>% 
+  mutate(NIST_Compound.Name = Compound.Name) %>% 
+  mutate(NIST_match_factor = Library.Match.Factor) %>% 
+  dplyr::select(BlobID, file_name, NIST_Compound.Name, NIST_match_factor)
+
+for (i in 2:nrow(bt_sum_nist)){
+ fi_name_s <- paste("blobtables/", bt_sum_nist$Fi_name[i], sep = "")
+ 
+ tt <- read.csv(fi_name_s) %>% 
+   mutate(file_name = bt_sum_nist$Template_File_Names[i]) %>% 
+  mutate(NIST_Compound.Name = Compound.Name) %>% 
+  mutate(NIST_match_factor = Library.Match.Factor) %>% 
+  dplyr::select(BlobID, file_name, NIST_Compound.Name, NIST_match_factor)
+
+ Mnew_t_nist <- rbind(M_t_nist, tt)
+ M_t_nist <- Mnew_t_nist
+ 
+ 
+}
+
+M_t_c <- M_t_f %>% 
+  left_join(M_t_ES, by = c("BlobID", "file_name")) %>% 
+  left_join(M_t_nist, by = c("BlobID", "file_name")) %>% 
+  filter(Library.Name!= "-")
+  
+
+M_t_goodES <- M_t_c %>% 
+  filter(ES_match_factor > 500) %>% 
+  dplyr::select(Compound.Name, ES_Compound.Name, ES_match_factor)
+
+M_t_goodNist <- M_t_c %>% 
+  filter(NIST_match_factor > 600) %>% 
+  dplyr::select(Compound.Name, ES_Compound.Name, ES_match_factor, NIST_Compound.Name, NIST_match_factor)
+
+
+```
+
+
+```{r}
+# making a function that will make the correct file names from the table of samples so that my actual sample files can be read in
+make_file_name_t <- function(date_string) {
+  file_start <- "blobtables/"
+  file_end <- ""
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
+# function to read in files 
+read_bt_files <- function(fi_name_short) {
+  
+  fi_name <- make_file_name_t(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+#reading in all of the blob tables and turning them into one big blob table- creating a long table
+make_massive_table <- function(summary_table){
+ 
+  M <- read_bt_files(as.character(summary_table$File_num[1]))
+
+  for(i in 2:length(summary_table$File_num)){
+    t <- read_bt_files(as.character(summary_table$File_num[i]))
+    Mnew <- rbind(M, t)
+    M <- Mnew
+    print(i)
+  }
+  M_t <<- M
+}
+
+make_massive_table(bt_sum_IOP1)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
