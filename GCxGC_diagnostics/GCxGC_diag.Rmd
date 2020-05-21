@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+author: "Emily"
+date: "5/18/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+
+tab <- read_csv("IS_comparison.csv")
+
+
+tab %>% ggplot(aes(x = Compound, y = Volume, fill = Instrument_Condition))+
+  geom_bar(stat="identity", position=position_dodge())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("Low Signal Internal Standard Instrument Volume Comparison")
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

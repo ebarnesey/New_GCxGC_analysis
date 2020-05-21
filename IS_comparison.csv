@@ -1,0 +1,43 @@
+Compound,Instrument_Condition,Volume
+dC36,Low_Signal,297
+dC34,Low_Signal,1121
+dC32,Low_Signal,305
+dC30,Low_Signal,2265
+dC28,Low_Signal,1636
+dC26,Low_Signal,275
+dC24,Low_Signal,3579
+dC22,Low_Signal,1500
+dC20,Low_Signal,7039
+dC18,Low_Signal,6795
+dC16,Low_Signal,724
+dC14,Low_Signal,0
+d-pyrene,Low_Signal,700
+d-cholesterol,Low_Signal,755
+d-cholestane,Low_Signal,968
+d-C6 acid,Low_Signal,2282
+d-C22 acid,Low_Signal,520
+d-C10 acid,Low_Signal,254
+chrysene-d,Low_Signal,126
+methoxyphenol-d3,Low_Signal,0
+4-methoxy-benzaldehyde,Low_Signal,0
+dC36,Normal,7222
+dC34,Normal,7777
+dC32,Normal,9291
+dC30,Normal,12658
+dC28,Normal,20813
+dC26,Normal,24977
+dC24,Normal,46758
+dC22,Normal,55127
+dC20,Normal,46163
+dC18,Normal,22767
+dC16,Normal,8696
+dC14,Normal,1851
+d-pyrene,Normal,14180
+d-cholesterol,Normal,12520
+d-cholestane,Normal,12980
+d-C6 acid,Normal,7951
+d-C22 acid,Normal,24071
+d-C10 acid,Normal,1709
+chrysene-d,Normal,4033
+methoxyphenol-d3,Normal,188
+4-methoxy-benzaldehyde,Normal,1851
