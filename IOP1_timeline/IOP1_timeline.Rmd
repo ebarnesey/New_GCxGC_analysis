@@ -907,8 +907,23 @@ analyte_sum_withcorr_sqsoa <- analyte_sum_withcorr %>%
 
 sqvol_vol <- sum(analyte_sum_withcorr_sqsoa$sum_rawvol)
 
+analyte_sum_withcorr_isop2 <- analyte_sum_withcorr %>%  
+  filter(X1221_0832_blob_48 > .7)
+
+analyte_sum_withcorr_isop1 <- analyte_sum_withcorr %>%  
+  filter(X1202_1412_blob_573 > .7)
+
+isop_vol1 <- sum(analyte_sum_withcorr_isop1$sum_rawvol)
+
+isop_vol2 <- sum(analyte_sum_withcorr_isop2$sum_rawvol)
+
+overlap_isop <- analyte_sum_withcorr_isop1 %>% 
+  inner_join(analyte_sum_withcorr_isop2)
+
 overlap_bboa_mtsoa <- analyte_sum_withcorr_bbOA %>% 
   inner_join(analyte_sum_withcorr_mtsoa)
+
+isop_12_overlap <- sum(overlap_isop$sum_rawvol)
 
 bboa_mtsoa_overlap = sum(overlap_bboa_mtsoa$sum_rawvol) 
 
@@ -922,6 +937,10 @@ bboa_vol/tot_vol
 mtoa_vol/tot_vol
 
 sqvol_vol/tot_vol
+
+isop_vol1/tot_vol
+
+isop_12_overlap/tot_vol
 
 bboa_mtsoa_overlap/tot_vol
 
