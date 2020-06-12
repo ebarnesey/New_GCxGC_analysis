@@ -446,8 +446,8 @@ untraced_tracking <- bt_sum_IOP1 %>%
 untraced_tracking %>% 
   ggplot(aes(x = r_date, y = perct_volfound))+
   geom_point()+
-  geom_line(aes(x = r_date, y = rawvol/Filter_punches/9900))+
-  geom_line(aes(x= r_date, y = rawvol/20900, color = "red"))
+  geom_line(aes(x = r_date, y = rawvol/Filter_punches/9900, color = "punch normalized loading"))+
+  geom_line(aes(x= r_date, y = rawvol/20900, color = "raw loading"))
 ```
 
 ### **Analysis Task 4: Internal Standard Organisation and Normalization**

@@ -1,0 +1,2247 @@
+---
+title: "External Standard Modeling Appendix"
+author: "Emily"
+date: "10/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Appendix A: R Code
+
+##Reading In Necessary Libraries
+
+```{r libs, echo=FALSE}
+library(Rcpp)
+library(caret) # cross validation
+
+library(randomForest)
+library(gbm)
+
+
+library(nnet)
+library(ROCR)
+
+library(caTools)
+
+library(MASS)
+
+
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+
+#install.packages("grid")
+library(grid)
+
+#install.packages("OrgMassSpecR")
+library(OrgMassSpecR)
+
+#install.packages("glue")
+library(glue)
+
+library(openxlsx)
+
+#install.packages("janitor")
+library(janitor)
+
+library(rpart) # CART
+library(rpart.plot) # CART plotting
+
+#install.packages("CHNOSZ")
+library(CHNOSZ)
+
+
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+
+#install.packages('e1071', dependencies=TRUE)
+library(e1071)
+```
+
+## Parsing Out Mass Spectra
+
+In this section, a CSV file containing the names, locations, and mass spectra of all of the external standard components is read in.  The mass spectra are in the form of a semicolon separated string. The principle peaks and the mass differences between key peaks are the key indicators of functional groups that exert the greatest influence on the calibration factor of the compound in question.  In this section, the top 10 peaks (by intensity) are identified for each compound.  Then, the top 21 peaks (the 21 peaks which appear in the most compounds from the external standard list) are turned into factors, for which each compound indicates 'true' or 'false' depending on whether one of the top 10 peaks for that compound exists on the list.
+
+```{r ES_readin}
+ES_table_o = read_csv(file = "amze_withsesq_total.csv")
+
+trim.leading <- function (x)  sub("^\\s+", "", x)
+
+ES_table_t = ES_table_o %>% 
+    mutate(MS = strsplit(as.character(MS), ";")) %>% 
+    unnest(MS) %>% 
+    filter(MS != "") %>% 
+    mutate(MS2 = trim.leading(MS)) 
+  
+
+
+
+ES_table_3 = separate(data = ES_table_t, col = MS2, into = c("mz", "intensity"), sep = " ")
+
+ES_table_full = ES_table_3 %>% 
+  mutate(intensity = as.numeric(intensity)) %>% 
+  mutate(mz = as.numeric(mz)) %>% 
+  arrange(desc(intensity)) %>% 
+  arrange(desc(Name)) %>% 
+  group_by(Name) %>%
+  mutate(my_ranks = order(order(intensity, decreasing=TRUE))) %>% 
+  ungroup()
+
+ES_table_trimmed = ES_table_full %>% 
+  filter(my_ranks < 11)
+
+mz_tab <- as.data.frame(table(ES_table_trimmed$mz))
+mz_tab <- mz_tab %>% 
+  mutate(mz = as.character(Var1)) %>% 
+  mutate(mz = as.numeric(mz))
+mz_tab <- mz_tab %>% 
+  arrange(desc(Freq)) %>% 
+  mutate(freq_ranks = order(order(Freq, decreasing = TRUE)))
+
+ES_table_ranked <- ES_table_trimmed %>% 
+  left_join(mz_tab) %>% 
+  filter(freq_ranks< 21)
+
+ES_common_mz = ES_table_ranked %>%
+  dplyr::select(Name, mz) %>% 
+  mutate(mz = paste("mz_", mz, sep = "_")) %>% 
+  mutate(mz_obs = TRUE) 
+
+wide_mz = ES_common_mz %>% 
+  spread(mz, mz_obs, fill = FALSE)
+  
+
+
+```
+
+Next, the losses are determined.  The mass differnces between the top 5 peaks for each compound are evaluated and turned into their own list.  As in the case of the peak list, the 20 peaks which appear most frequently become true/false factors for inclusion in future analysis
+
+```{r losses}
+# figuring out losses
+
+
+unique_names = unique(ES_table_trimmed$Name)
+
+x = seq(1, 5, 1)
+y = x
+
+d2 <- expand.grid(x = x, y = y, KEEP.OUT.ATTRS = FALSE)
+d2 <- d2 %>% 
+  filter(y > x)
+
+xt = d2$x
+
+yt = d2$y
+
+names_losses = as.character(rep(unique_names, each = length(d2$x)))
+losses_vec = rep(999, times = length(names_losses))
+loss_num = rep(seq(1, 10, 1), times = length(unique_names))
+
+losses <- data.frame(names_losses, losses_vec, loss_num)
+losses = losses %>% 
+  mutate(names_losses = as.character(names_losses))
+
+
+
+for(i in 1:1340) {
+  
+  name_t = names_losses[i]
+  loss_num_t = losses$loss_num[i]
+  
+  upper_index = xt[loss_num_t]
+  lower_index = yt[loss_num_t]
+  
+  df_t = ES_table_trimmed %>% 
+    filter(Name == name_t)
+  
+  upper_mz = df_t$mz[upper_index]
+  lower_mz = df_t$mz[lower_index]
+  
+  losses$losses_vec[i] = abs(upper_mz - lower_mz)
+  
+}
+
+loss_tab <- as.data.frame(table(losses$losses_vec))
+loss_tab <- loss_tab %>% 
+  arrange(desc(Freq)) %>% 
+  mutate(freq_ranks = order(order(Freq, decreasing = TRUE))) %>% 
+  mutate(Var1 = as.character(Var1)) %>% 
+  mutate(Var1 = as.numeric(Var1))
+
+losses = losses %>% 
+  left_join(loss_tab, by = c("losses_vec"= "Var1"))
+
+losses_trimmed = losses %>% 
+  filter(freq_ranks<21)
+
+
+ES_common_losses = losses_trimmed %>% 
+  dplyr::select(names_losses, losses_vec) %>% 
+  mutate(Loss_obs = TRUE) 
+ 
+wide_losses = reshape(ES_common_losses, idvar = "names_losses", timevar = "losses_vec", direction = "wide")
+
+ES_common_losses = losses_trimmed %>%
+  dplyr::select(names_losses, losses_vec) %>% 
+  mutate(losses_vec = paste("loss_", losses_vec, sep = "_")) %>% 
+  mutate(Loss_obs = TRUE) %>% 
+  distinct()
+
+wide_losses = ES_common_losses %>% 
+  spread(losses_vec, Loss_obs, fill = FALSE)
+
+
+```
+
+## Category Assignment: Future Steps
+
+In the following section, the compounds are classified by functional group and random forest modeling is utilized to predict the category based on mass spectrum.  The accuracy of this approach is poor, likely because many compounds have multiple functional groups aparent in their mass spectra so assigning a compound to only one functional group class may be an inappropriate approach.  Future investigations will attempt to predict on a true/false basis whether a given compound (meaning its mass spectrum) is indicative of a particular functional group rather than approaching as a classification problem.
+```{r}
+cat <- read_csv("Categories_ES.csv")
+
+Cat_full <- cat %>% 
+  left_join(wide_losses, by = c("Name" = "names_losses")) %>% 
+  left_join(wide_mz) %>% 
+  mutate(Func_group_cat = as.factor(Func_group_cat)) 
+
+Cat_full[is.na(Cat_full)] <- FALSE
+
+set.seed(100)
+split = sample.split(Cat_full$Func_group_cat, SplitRatio = 0.75)
+
+# what is a split?
+Cat.train <- filter(Cat_full, split == TRUE) # is split a variable in loans?
+Cat.test <- filter(Cat_full, split == FALSE)
+```
+
+
+```{r, eval = FALSE}
+
+set.seed(144)
+train.rf = train(Func_group_cat~., data = Cat.train, method = "rf", tuneGrid = data.frame(mtry=seq(1, 25, 1)), trControl = trainControl(method = "cv", number = 5), metric = "Accuracy")
+
+best.rf = train.rf$finalModel
+best.rf
+
+rf.plot <- ggplot(train.rf$results, aes(x=mtry, y=Accuracy)) + geom_line(lwd=2) +
+  ylab("Accuracy of Predictions")
+rf.plot
+
+Cat.mm = as.data.frame(model.matrix(Func_group_cat ~., data = Cat.test))
+
+set.seed(144)
+pred.best.rf = predict(best.rf, newdata = Cat.mm, type = "class")
+
+t_rf_all = table(Cat.test$Func_group_cat, pred.best.rf)
+t_rf_all
+
+accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test)
+accuracy.rf 
+```
+
+
+
+```{r, eval=FALSE, echo=FALSE}
+#Note: dont  run not working
+for(i in 1:length(ES_table_o)){
+  #i = 1
+  ms_temp = ES_table_o$MS[i]
+  temptab = read.table(ms_temp, sep = ";")
+  
+  
+}
+
+#test = ReadMspFile(file = "MoNA-export-GC-MS_Spectra.msp", skip = 2, comment.char = "", remove.placeholders = TRUE)
+
+#msp <- read.table(file = "MoNA-export-GC-MS_Spectra.msp", sep = ";", skip = 0, fill = TRUE, 
+ #                   stringsAsFactors = FALSE, comment.char = "")
+
+msp <- msp[-ncol(msp)]
+
+  # make tall
+  values <- NULL
+  for (i in 1:ncol(msp)) {
+    values <- c(values, msp[, i])
+  }
+  tall.format <- as.vector(values, mode = "character")
+
+  RemoveWhite <- function(x) {
+    y <- strsplit(x, split = "[[:space:]]")[[1]]
+    z <- y[y != ""]
+    return(as.numeric(z))
+  }
+  results.list <- lapply(tall.format, RemoveWhite)
+
+  result <- as.data.frame(do.call("rbind", results.list))
+  names(result) <- c("mz", "intensity")
+  result <- result[result$intensity != 0, ]
+  ordered.result <- result[order(result$mz), ]
+  row.names(ordered.result) <- 1:nrow(ordered.result)
+  return(ordered.result)
+```
+
+## Importing all of the Blob Table Index
+
+Each point of each of the 5 calibration curves is saved as a blob table file containing the abundance of each of the external standard compounds in that sample run (aka cal curve point).  In order to read in these files with the necessary general information on what day the cal curve occurred and what point of the cal curve each run corresponds to, an index is read in with the file names and additional information.  
+
+```{r timeline_testing, warning = FALSE}
+#reading in the index of the blob tables
+bt_sum <- read_csv("Blob_table_summary_ES.csv")
+
+#adding a date column that R will recognize
+
+bt_sum <- bt_sum %>% mutate(r_rundate = as.Date(Run_date, format = "%m/%d/%Y"))
+
+
+#excel_numeric_to_date(as.numeric(as.character(Run_date_num)), date_system = "modern"f
+
+# making a function that will make the correct file names from the table of samples so that my actual sample files can be read in
+make_file_name_es <- function(date_string) {
+  file_start <- "Cal_Curve_blobtables/"
+  file_end <- ".csv"
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
+# function to read in files 
+read_bt_files <- function(fi_name_short) {
+  
+  fi_name <- make_file_name_es(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+#reading in all of the blob tables and turning them into one big blob table- creating a long table
+make_massive_table <- function(summary_table){
+ 
+  M <- read_bt_files(as.character(summary_table$File_num[1]))
+
+  for(i in 2:length(summary_table$File_num)){
+    t <- read_bt_files(as.character(summary_table$File_num[i]))
+    Mnew <- rbind(M, t)
+    M <- Mnew
+    print(i)
+  }
+  M_t <<- M
+}
+
+make_massive_table(bt_sum)
+
+#adding in all information from the summary table
+M_t_full <- M_t %>% left_join(bt_sum)
+
+# tidying column names
+names(M_t_full) <- make.names(names(M_t_full),unique = TRUE)
+
+```
+
+## Importing and Cleaning Raw Blob Tables
+
+The raw blob tables may contain a variety of false matches (aka compounds labeled as external standard but that are not actually standard components).  In this section mass spectral match factors, location statistics (difference between library retention index and retention index in the given blob table), and size are used to screen out incorrect matches.
+
+```{r match_finding, message =FALSE}
+# filtering out bad LRI matches
+Match_factor_floor <- 750
+Reverse_match_factor_floor <- 800
+LRI_diff_floor <- 10
+
+fb_match_factor_floor <- 600
+fb_reverse_match_factor_floor <- 700
+IS_lib_name <- "amzi0503_b"
+#FB_lib_name <- "fb_amz_compiled_t"
+#ES_lib_name <- "amze_unnamedsesq_1"
+
+Dropped_compounds <- read_csv("to_exclude.csv") %>% 
+  mutate(exclude_tag = TRUE) %>% 
+  right_join(M_t_full) %>% 
+  filter(exclude_tag == TRUE) %>% 
+  dplyr::select(-c(exclude_tag, reason))
+
+#rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
+
+# creating a column of the differences in linear retention indecies so that poor matches can be screened out
+M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
+  anti_join(Dropped_compounds)
+
+# identifying the internal standard
+IS_goodmatch <- M_t_LRI %>% 
+  filter(Library.Name == IS_lib_name) 
+
+IS_dat <- IS_goodmatch %>% 
+  arrange(desc(Volume)) %>% 
+  arrange(Compound.Name) %>% 
+  arrange(File_num) %>% 
+  distinct(Compound.Name, File_num, .keep_all = TRUE) %>% 
+  dplyr::select(-Volume)
+
+IS_unique <- IS_goodmatch %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(Volume_tot = sum(Volume)) %>% 
+  left_join(IS_dat, by = c("File_num", "Compound.Name")) %>% 
+  mutate(Volume = Volume_tot)
+
+
+#filter(LRI_diff < LRI_diff_floor-5)  
+ # filter(Library.Match.Factor > Match_factor_floor)  
+
+#FB_goodmatch <- M_t_LRI %>% 
+ # filter(Library.Name == FB_lib_name) %>% 
+  #filter(LRI_diff < LRI_diff_floor) %>% 
+  #filter(Library.Match.Factor > fb_match_factor_floor || Library.Reverse.Match.Factor > fb_reverse_match_factor_floor)
+
+
+ # anti_join(FB_goodmatch)
+M_t_all_analytes <- M_t_LRI %>% 
+  filter(Library.Name != IS_lib_name) %>% 
+  filter(Library.Name != "-")
+  
+M_t_analyte_dat <- M_t_all_analytes %>% 
+  #filter(Library.Name != "fb_amz_compiled_t") %>% 
+  #filter(LRI_diff < LRI_diff_floor) %>% 
+  #filter(Library.Match.Factor > Match_factor_floor || Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
+  arrange(desc(Volume)) %>% 
+  arrange(Compound.Name) %>% 
+  arrange(File_num) %>% 
+  distinct(Compound.Name, File_num, .keep_all = TRUE) %>% 
+  dplyr::select(-Volume)
+
+M_t_analyte_unique <- M_t_all_analytes %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(Volume_tot = sum(Volume)) %>% 
+  left_join(M_t_analyte_dat, by = c("File_num", "Compound.Name")) %>% 
+  mutate(Volume = Volume_tot)
+  
+  
+  
+
+```
+
+The metrics used for screening out bad matches are up for some level of interpretation and as a result it is important to keep track of performance metrics.
+
+```{r evaluating_lib_performance}
+
+# tracking the mass of all of the analytes before bad matches are screened out for later analysis of library performance
+M_t_all_analytes_volcount <- M_t_all_analytes %>% 
+  group_by(File_num) %>% 
+  summarise(rawvol = sum(Volume))
+
+# tracking the number of all analutes in
+M_t_all_analytes_ncount <- M_t_all_analytes %>% 
+  count(File_num) %>% 
+  rename(total_num_analyte = n)
+
+M_t_match_analytes_volcount <- M_t_analyte_unique %>% 
+  group_by(File_num) %>% 
+  summarise(rawvol_match = sum(Volume))
+
+M_t_match_analytes_ncount <- M_t_analyte_unique %>% 
+  count(File_num) %>% 
+  rename(total_num_analyte_match = n)
+
+M_t_analyte_summary <- M_t_all_analytes_volcount %>% 
+  left_join(M_t_all_analytes_ncount) %>% 
+  left_join(M_t_match_analytes_volcount) %>% 
+  left_join(M_t_match_analytes_ncount) %>% 
+  mutate(perct_nfound = (total_num_analyte_match/total_num_analyte)*100) %>% 
+  mutate(perct_volfound = (rawvol_match/rawvol)*100)
+
+compound_pop <- M_t_analyte_unique %>% 
+  count(Compound.Name) %>% 
+  rename(comp.n = n) %>% 
+  mutate(pct_of_samp = (comp.n/max(comp.n)*100))
+
+#table(compound_pop$comp.n)
+#hist(compound_pop$comp.n)
+
+# 
+# #note: potential issue with screening out bad fb matches eek
+# M_t_analyte_count <- M_t_full %>%
+#   filter(Library.Name != "amzi0503_b") %>%
+#   filter(Library.Name != "fb_amz_compiled_t") %>%
+#   count(File_num) %>%
+#   rename(total_num_analyte = n)
+
+M_t_analyte_count <- M_t_all_analytes %>% 
+  count(File_num) %>%
+  rename(total_num_analyte = n)
+# 
+# # counting the number of unique analytes in each image
+num_analyte_unique <- M_t_analyte_unique %>%
+  count(File_num) %>%
+  rename(unique.analyte = n)
+
+# counting the number based percent of compounds being traced in all 
+perct_comps_traced <- num_analyte_unique %>% 
+   left_join(M_t_analyte_count) %>% 
+   mutate(pct_found = unique.analyte/total_num_analyte)
+# 
+#perct_comps_traced %>%
+#  ggplot(aes(y = pct_found))+
+#  geom_boxplot()
+
+summary(perct_comps_traced$pct_found)
+
+
+M_t_analyte_unique <- M_t_analyte_unique %>% left_join(num_analyte_unique)
+
+compound_pop <- M_t_analyte_unique %>% 
+  count(Compound.Name) %>% 
+  rename(comp.n = n) %>% 
+  mutate(pct_of_samp = (comp.n/max(comp.n)*100))
+
+table(compound_pop$comp.n)
+
+hist(compound_pop$pct_of_samp, 
+     main = paste("Histogram of", nrow(compound_pop), "Traced Compounds\nOver 5 Day Test Period"),
+     xlab = "Percent Occurence Above Detection Limits",
+     col = "grey")
+
+M_t_analyte_unique <- M_t_analyte_unique %>% 
+  left_join(compound_pop)
+
+
+M_t_analyte_unique %>% 
+  mutate(char_comp_n = as.integer(round(pct_of_samp, 0))) %>% 
+  group_by(char_comp_n) %>% 
+  summarise(avg_vol_byn = mean(Volume)) %>% 
+  ggplot(aes(x = char_comp_n, y = avg_vol_byn)) +
+  geom_col()+
+  labs(title = "Average Blob Volume by Library Match Frequency")+
+  xlab("Percent of Samples with Positive Library Match")+
+  ylab("Average Blob Volume")
+
+
+
+```
+From this I can see that not all of the compounds are being traced properly- this may or may not be a problem, and is an area for additional checking. 
+
+## Internal Standard Mapping
+
+Internal standard assignments in raw blob tables require cleaning before they can be utilized for normalization, similar to the external standard components.
+```{r IS_mapping}
+# note: unlike sample analytes, internal standard compounds are frequently split vertically into multiple blobs because of the high volume.  In order to account for this, I am summing all blobs together that meet the high match criteria and are very close in the first dimension.
+IS_unique2 <- IS_goodmatch %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(Volume_tot = sum(Volume))
+
+IS_positions <- IS_goodmatch %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+
+IS_unique_pos <- IS_unique2 %>% 
+  left_join(IS_positions)
+
+IS_test1 <- IS_unique_pos %>% 
+  filter(File_num == "GCxGC_20181201_0136")
+
+IS_1_vol <- IS_test1$Volume_tot
+RI1 <- IS_test1$LRI_avg
+RI2 <- IS_test1$RI2
+
+# IS_1_pos <- IS_test1 %>% 
+#   ungroup() %>% 
+#   dplyr::select("LRI_avg", "RI2")
+```
+There are a variety of options for normalizing by internal standard volume, and these different options will be explored in greater depth in future.  The option utilized in this test is the creation of a generalized additive model which uses the recovery of each internal standard in each of the images to create a model of how compound recovery is affected by the sample in which each compound is measured, the position in terms of retention index (a proxy for volatility), and the position in terms of RI2 (a proxy for polarity).  The advantage of this method is that it more easily allows analyte compounds which fall outside of the bounds of the positions of the internal standards to be normalized, and it diminishes the impact of one incorrect assignment of an internal standard species in a single image, as modeled recoveries will be informed by the typical recovery of each compound rather than being informed only by the range of recoveries within a single sample. Below I test a few options for modeling internal standard recovery using a GAM.
+
+```{r warning = FALSE}
+# trying IS by GAM
+library(gam)
+library(mgcv)
+
+# using a generalized additive model to identify what internal standard recovery would be expected at each point in the GCxGC space and for each file
+IS_unique_pos_f <- IS_unique_pos %>% 
+  mutate(F_num_f = as.factor(File_num)) 
+
+y <- IS_unique_pos_f$Volume_tot
+Fac <- IS_unique_pos_f$F_num_f
+x <- IS_unique_pos_f$LRI_avg
+z <- IS_unique_pos_f$RI2
+
+# IS_gam <- gam(IS_unique_pos_f$Volume_tot~ as.factor(IS_unique_pos_f$F_num_f) + s(IS_unique_pos_f$LRI_avg)+s(IS_unique_pos_f$RI2))
+# 
+# summary(IS_gam)
+# plot(IS_gam, residuals = TRUE)
+
+IS_gam2 <- gam(y ~ Fac + s(x)+s(z), family = quasi())
+summary(IS_gam2) 
+
+#IS_gam3 <- gam(y ~ Fac + s(x)+s(z), family = poisson())
+#summary(IS_gam3)
+
+#vis.gam(IS_gam3)
+
+
+# testing gam on a single file
+test_gam_1 <- IS_unique_pos_f %>% 
+  filter(File_num == "GCxGC_20181201_0136") %>% 
+  rename(Volume_tot_inst = Volume_tot) %>% 
+  mutate(F_num_f = as.factor(F_num_f))
+
+#test_gam_1a <- data.frame(Fac = test_gam_1$F_num_f, x=test_gam_1$LRI_avg, z=test_gam_1$RI2)
+
+#pred_gam <- predict.gam(IS_gam2, data.frame(Fac = as.factor("GCxGC_20181201_0136"), x = test_gam_1a$test_gam_1.LRI_avg, z = test_gam_1a$test_gam_1.RI2))
+
+# visualizing IS_gam2 and how it would predict internal standard volumes in one fil
+test_gam_1b <- test_gam_1 %>% 
+  mutate(Volume_tot_model = predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
+
+test_gam_1b %>% 
+  ggplot(aes(x = LRI_avg, y = RI2, color = Volume_tot_inst)) +
+  geom_point()
+
+test_gam_1b %>% 
+  ggplot(aes(x = LRI_avg, y = RI2, color = Volume_tot_model)) +
+  geom_point()
+
+test_gam_all_b <- IS_unique_pos_f %>% 
+  mutate(Volume_total_model =  predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
+
+### note that the output of the following plot indicates that the IS_gam2 is not appropriate for my data; it is impossible for signal to be less than zero, meaning that the low concentration compounds are not being modeled well. a solution for this is to try a log transformation to improve modeling of low concentration internal standards
+test_gam_all_b %>% 
+  ggplot(aes(x = Volume_tot, y = Volume_total_model, color = Compound.Name))+
+  geom_point()
+
+#### gam with a log transform of volumes
+#y <- log(IS_unique_pos_f$Volume_tot)
+y <- IS_unique_pos_f$Volume_tot
+Fac <- IS_unique_pos_f$F_num_f
+x <- IS_unique_pos_f$LRI_avg
+z <- IS_unique_pos_f$RI2
+
+#IS_gam2b <- gam(y ~ Fac + s(x)+s(z), family = gaussian())
+IS_gam2b <- gam(y ~ Fac + s(x)+s(z), family = poisson())
+summary(IS_gam2b)
+plot(IS_gam2b) # first graph illustrating how recovery varies with volatility, second graph illustrating how recovery varies with polarity. Moral of the story is that recovery is best around the middle and drops off in all directions
+
+
+# visualizing the IS response surface in GCxGC space implied by the internal standards from the 9 test filters
+vis.gam(IS_gam2b, view = c("x", "z"), theta = -45, phi = 45, type = "response")
+
+test_gam_all <- IS_unique_pos_f %>% 
+  mutate(Vol_inst_log = log(Volume_tot)) %>% 
+  #mutate(Volume_total_model_log =  (predict.gam(IS_gam2b, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))) %>% 
+  #mutate(Volume_total_model = exp(Volume_total_model_log))
+  mutate(Volume_total_IS_model = (predict.gam(IS_gam2b, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2), type = "response")))
+  
+#test_gam_all %>% 
+#  ggplot(aes(x = Vol_inst_log, y = Volume_total_model_log, color = Compound.Name))+
+#  geom_point()
+
+test_gam_all %>% 
+  ggplot(aes(x = Volume_tot, y = Volume_total_IS_model, color = Compound.Name))+
+  geom_point()+
+  xlab("Internal Standard Measured Volume")+
+  ylab("Internal Standard Modeled Volume")
+
+
+test_gam_all %>% 
+  ggplot(aes(x = Compound.Name, y = Volume_tot))+
+  geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Volume")+
+  xlab("Internal Standard Compound")
+
+
+
+```
+```{r}
+## add a column to the master list of unique analytes which is the internal standard normalized volume at each point in time
+M_t_analyte_unique_IS_GAM <- M_t_analyte_unique %>% 
+  mutate(IS_glm =  exp(predict.gam(IS_gam2b, data.frame(Fac = as.factor(File_num), x = LRI.I, z = Retention.II..sec.)))) %>% 
+  mutate(Vol_norm_GLM = Volume/IS_glm)
+```
+Note- moving forward, before doing the correction between ES and sample, must train a GAM on everything- both the sample and the ES (cant do just one)
+
+
+## Trying the internal standard nearest normalized by the average of that IS
+```{r}
+IS_positions_avg <- read.csv("IS_positions_avg.csv")
+
+IS_unique <- IS_goodmatch %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(Volume_tot = sum(Volume))
+
+IS_positions <- IS_goodmatch %>% 
+  group_by(Compound.Name, File_num) %>% 
+  #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+
+IS_unique_pos <- IS_unique %>% 
+  left_join(IS_positions)
+
+IS_test1 <- IS_unique_pos %>% 
+  filter(File_num == "GCxGC_20181201_0136")
+
+IS_1_vol <- IS_test1$Volume_tot
+RI1 <- IS_test1$LRI_avg
+RI2 <- IS_test1$RI2
+
+# IS_1_pos <- IS_test1 %>% 
+#   ungroup() %>% 
+#   dplyr::select("LRI_avg", "RI2")
+
+#IS_positions_12030456 <- read.csv("IOP1_blobtables_2/IS_1203_0456.csv")
+#IS_rt2 <- IS_positions_12030456 %>% 
+#  select(Compound.Name, Retention.II..sec.)
+
+
+#IS_positions_avg <- IS_positions %>% 
+#  group_by(Compound.Name) %>% 
+
+
+#  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE)) %>% 
+ # left_join(IS_rt2)
+
+
+#write.csv(IS_positions_avg, "IS_positions_avg.csv")
+
+
+IS_avg_vols <- IS_unique %>% 
+  group_by(Compound.Name) %>% 
+  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  left_join(IS_unique) %>% 
+  mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
+  mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
+  left_join(bt_sum)
+
+IS_cat <- read.csv("IS_withcat.csv")
+IS_cat <- IS_cat %>% 
+  dplyr::select(-X)
+
+IS_avg_vols <- IS_avg_vols %>% 
+  left_join(IS_cat)
+  
+
+IS_just_one_IS <- IS_avg_vols %>% 
+  filter(Compound.Name == "dC24") %>% 
+  dplyr::select(File_num, dalk_norm=IS_mean_norm) 
+
+IS_stability <- IS_avg_vols %>% 
+  left_join(IS_just_one_IS) %>% 
+  left_join(IS_positions_avg)
+
+
+```
+
+
+
+```{r}
+LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
+LRI2_avg = mean(IS_positions_avg$Retention.II..sec.)
+
+Analyte_positions_trial <- M_t_analyte_unique %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+
+# note filtering out three small blobs outside of RI window
+
+Analyte_positions <- M_t_analyte_unique %>% 
+  filter(!is.na(LRI.I)) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = min(Retention.II..sec. - rt2_floor))
+
+Analyte_positions <- Analyte_positions %>% 
+  mutate(relative_LRI = LRI_avg/LRI1_avg) %>% 
+  mutate(relative_LRI2 = RI2/LRI2_avg)
+
+Analyte_pos_short <- Analyte_positions %>% 
+  select(relative_LRI, relative_LRI2)
+
+IS_pos_short <- IS_positions_avg %>% 
+  select(relative_LRI, relative_LRI2)
+
+#knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
+
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 1)
+
+Analyte_IS_Index <- data.frame(testnn$nn.idx)
+
+Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3)
+
+Analyte_with_IS <- Analyte_pos_ad %>% 
+  mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
+  mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
+  mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
+
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[1]) %>% 
+#   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[1]) %>% 
+#   mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[1])
+#   
+# for(i in 1:nrow(Analyte_with_IS)){
+#   
+#   i = 2
+#   isind1 = Analyte_with_IS$IS_index1[i]
+#   isind2 = Analyte_with_IS$IS_index2[i]
+#   isind3 = Analyte_with_IS$IS_index3[i]
+#   
+#   Analyte_with_IS$IS_appropriate1[i] = IS_positions_avg$Compound.Name[isind1]
+#   
+#   if(isind2==0){
+#     Analyte_with_IS$IS_appropriate2[i] = NA 
+#   } else {
+#     
+#     Analyte_with_IS$IS_appropriate2[i] = IS_positions_avg$Compound.Name[isind2]
+#   }
+#   
+#    if(isind3==0){
+#     Analyte_with_IS$IS_appropriate3[i] = NA 
+#   } else {
+#     
+#     Analyte_with_IS$IS_appropriate3[i] = IS_positions_avg$Compound.Name[isind3]
+#   }
+#   
+# }
+
+
+Analyte_with_IS_positions <- Analyte_with_IS %>% 
+  left_join(Analyte_positions) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate1"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate2"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name")) 
+  
+
+M_t_analyte_withIS <- M_t_analyte_unique %>% 
+  left_join(Analyte_with_IS) %>% 
+  mutate(IS_vol1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I))  
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  
+  IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
+  IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
+  IS_name3 = M_t_analyte_withIS$IS_appropriate3[i]
+  
+  
+  
+  File_num_t = M_t_analyte_withIS$File_num[i]
+  
+  IS_indicated1 <- IS_stability %>% 
+    filter(Compound.Name == IS_name1) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol1[i] <-IS_indicated1$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm1[i] <-IS_indicated1$IS_mean_norm[1]
+  
+  IS_indicated2 <- IS_stability %>% 
+    filter(Compound.Name == IS_name2) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol2[i] <-IS_indicated2$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm2[i] <-IS_indicated2$IS_mean_norm[1]
+  
+  IS_indicated3 <- IS_stability %>% 
+    filter(Compound.Name == IS_name3) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol3[i] <-IS_indicated3$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm3[i] <-IS_indicated3$IS_mean_norm[1]
+  
+}
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
+  mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+  mutate(vol_is_rawnorm = Volume/IS_vol)
+```
+
+
+
+## Loading External Standard
+
+Next the External standard calibration point information must be added into the processed blob files and reformatted for future modeling. Additionally, cal curves must be plotted to identify problematic points. 
+
+```{r}
+cal_pts <- read_csv("Cal_Curve_points_ES2.csv")
+
+# tidying column names
+names(cal_pts) <- make.names(names(cal_pts),unique = TRUE)
+
+cal_pts <- cal_pts %>% 
+  dplyr::select(-Description)
+
+cal_pts_long <- cal_pts %>% 
+  gather(key = "Cal_Point", value = "Cal_amt_ng",
+       Cal_pt_1, Cal_pt_2, Cal_pt_3, Cal_pt_4, Cal_pt_5, Cal_pt_6) %>% 
+  dplyr::select(Compound.Name, Cal_Point, Cal_amt_ng)
+
+n_c_full <- M_t_analyte_withIS %>% 
+  left_join(cal_pts_long)
+
+
+for(i in 1:nrow(cal_pts)){
+
+  
+  bid_temp <- cal_pts$Compound.Name[i]
+
+  n_c_full_sub <- n_c_full %>% 
+    filter(Compound.Name == bid_temp)
+
+  p <- n_c_full_sub %>% 
+    ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
+    geom_point()
+  
+  print(p)
+}
+
+
+write.csv(n_c_full, "inspecting_calpoints2.csv")
+
+j <- 4
+
+bid_tempj <- cal_pts$Compound.Name[j]
+
+  n_c_full_subj <- n_c_full %>% 
+    filter(Compound.Name == bid_tempj)
+
+  pp <- n_c_full_subj %>% 
+    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    geom_point()+
+    xlab("Calibration Amount (ng)")+
+    ylab("Instrument Volume Response")
+  
+  print(pp)
+
+
+
+
+```
+Problematic cal curve points must be manually removed- as no single cal point is consistently off, it is probable that rather than a preparation error, there has been an issue with compound identification either in GC image or in the screening tools used prior to remove duplicate identification.  As the goal is to quantify unknown compounds and I know that the points should if prepared correctly corm a straight line, points which violate this are manually removed. 
+
+```{r}
+
+rows_todrop1 <- n_c_full %>% 
+  filter(Cal_Point == 5)
+
+rows_todrop1 <- n_c_full %>% 
+  filter((Compound.Name == "maltol" & Cal_Point == "Cal_pt_6" & r_rundate == "2018-11-27") |
+  (Compound.Name == "C8 acid" & Cal_Point == "Cal_pt_6" & r_rundate == "2018-11-27")|
+  (Compound.Name == "C9 acid" & Cal_Point == "Cal_pt_6" & r_rundate == "2018-11-27")|
+  (Compound.Name == "2-Ketoglutaric acid, tri-TMS" & Cal_Point == "Cal_pt_5" & r_rundate == "2018-12-10"))
+
+ES_cleaned1 <- n_c_full %>% 
+  anti_join(rows_todrop1)
+
+
+for(i in 1:nrow(cal_pts)){
+
+  bid_temp <- cal_pts$Compound.Name[i]
+
+  n_c_full_sub <- ES_cleaned1 %>% 
+    filter(Compound.Name == bid_temp)
+
+  p <- n_c_full_sub %>% 
+    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    geom_point()
+  
+  #print(p)
+}
+ 
+  
+  
+  
+
+```
+The cleaned cal curves look significantly better.  
+
+```{r}
+Cat_trimmed <- Cat_full %>% 
+  dplyr::select(-c(RT1, RT2, Retention_index, d_alkane_RTI))
+
+ES_withcat <- ES_cleaned1 %>% 
+  left_join(Cat_trimmed, by = c("Compound.Name" = "Name"))
+
+
+```
+
+```{r OSR}
+OSR2 <- function(predictions, train, test) {
+  SSE <- sum((test - predictions)^2)
+  SST <- sum((test - mean(train))^2)
+  r2 <- 1 - SSE/SST
+  return(r2)
+}
+
+```
+
+## Modeling First Steps
+
+```{r lin model}
+ES_for_quant <- ES_withcat %>% 
+  dplyr::select(-c(BlobID, Description, Group.Name, Constellation.Name, Inclusion, LRI.I, Library.ID, Library.NIST.ID, Library.Match.Factor, 
+                   Library.Reverse.Match.Factor, Library.Probability, Review.Status, Internal.Standard, Retention.I..min., 
+                   Peak.Value, Volume, Quantifier.1., Quantifier.2., Quantifier.Response.1., Quantifier.Response.2., Volume.Ratio, File_num, 
+                   Category, Filter_num, Filter_punches, IOP, AMZ_date, T_O_D, Date_num, Internal_load, Cal_Point_number, Run_date,
+                   Cal_Point, LRI_diff, unique.analyte, comp.n, pct_of_samp, Func_group_cat, Library.Name))
+
+# split into training and test
+#train.ids = sample(nrow(ES_for_quant), .7*nrow(ES_for_quant))
+#ES.train = ES_for_quant[train.ids,]
+#ES.test = ES_for_quant[-train.ids,]
+
+set.seed(186)
+train.ids2 = sample(nrow(Cat_trimmed), .7*nrow(Cat_trimmed))
+train_names = Cat_trimmed[train.ids2,] %>% 
+  dplyr::select(Name) %>% 
+  mutate(is_train = 1)
+
+ES_for_quant2 <- ES_for_quant %>% 
+  left_join(train_names, by = c("Compound.Name"= "Name")) 
+
+ES_for_quant2$is_train[is.na(ES_for_quant2$is_train)] <- 0
+  
+
+ES.train <- ES_for_quant2 %>% 
+  filter(is_train == 1) %>% 
+  dplyr::select(-is_train)
+
+ES.test <- ES_for_quant2 %>% 
+  filter(is_train == 0) %>% 
+  dplyr::select(-is_train)
+
+ES.train.withname <- ES.train
+ES.test.withname <- ES.test
+
+ES.train_lm1 <- ES.train %>% 
+  dplyr::select(-Compound.Name) %>% 
+  dplyr::select(-r_rundate)
+
+ES.test_lm1 <- ES.test %>% 
+  dplyr::select(-Compound.Name) %>% 
+  dplyr::select(-r_rundate)
+
+linmod1 <- lm(Cal_amt_ng ~., data = ES.train_lm1)
+
+
+summary(linmod1)
+
+ES.train.lm <- ES.train_lm1 %>% 
+  dplyr::select(-c(Retention.II..sec., loss__22, loss__29, loss__44, mz__105, mz__55))
+
+ES.test.lm <- ES.test_lm1 %>% 
+  dplyr::select(-c(Retention.II..sec., loss__22, loss__29, loss__44, mz__105, mz__55))
+
+linmod2 <- lm(Cal_amt_ng ~., data = ES.train.lm)
+
+summary(linmod2)
+
+predicted_lm1 <- predict(linmod1, ES.test_lm1)
+
+predicted_lm2 <- predict(linmod2, ES.test.lm)
+
+osr_lm1 <- OSR2(predicted_lm1, ES.train_lm1$Cal_amt_ng, ES.test_lm1$Cal_amt_ng)
+
+mae_lm1 <- MAE(obs = ES.test_lm1$Cal_amt_ng, pred = predicted_lm1)
+
+osr_lm2 <- OSR2(predicted_lm2, ES.train_lm1$Cal_amt_ng, ES.test_lm1$Cal_amt_ng)
+
+mae_lm2 <- MAE(obs = ES.test$Cal_amt_ng, pred = predicted_lm2)
+
+```
+
+The OSR2 of the original model is `r osr_lm1` and the MAE is `r mae_lm1`. With the least significant factors removed, the OSR2 is `r osr_lm2` and the MAE is `r mae_lm2`.  Both are quite terrible- clearly linear modeling is not the best approach for this effort.
+
+## CART modeling
+
+
+```{r}
+cart.mod <- rpart(Cal_amt_ng ~., data = ES.train_lm1, method = "anova" , cp = 0.001, minsplit = 5)
+
+#method anova does regression not classification
+## fill in the method yourselves. Might require some online searches!! 
+
+
+prp(cart.mod)
+
+CartPredictions <- predict(cart.mod, newdata=ES.test_lm1)
+SSE = sum((ES.test_lm1$Cal_amt_ng - CartPredictions)^2)
+SST = sum((ES.test_lm1$Cal_amt_ng - mean(ES.train_lm1$Cal_amt_ng))^2)
+OSR2_cart = 1 - SSE/SST # is this model useful at all? 
+OSR2_cart
+
+mae_cart <- MAE(obs = ES.test_lm1$Cal_amt_ng, pred = CartPredictions)
+```
+While there has been moderate improvement with a OSR2 of -.16 and a MAE of 15.5, the CART model also does a poor job of predicting response.
+
+```{r}
+set.seed(144)
+mod.rf1 <- randomForest(Cal_amt_ng ~ .-Compound.Name, data = ES.train, mtry = 34, nodesize = 5, ntree = 1000)
+
+pred.rf <- predict(mod.rf1, newdata = ES.test)
+
+
+
+RFPredictions <- predict(mod.rf1, newdata=ES.test)
+
+
+SSE = sum((ES.test$Cal_amt_ng - RFPredictions)^2)
+SST = sum((ES.test$Cal_amt_ng - mean(ES.train$Cal_amt_ng))^2)
+OSR2_rf = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf
+
+mae_rf <- MAE(obs = ES.test$Cal_amt_ng, pred = RFPredictions)
+
+```
+Cross validalidation has determined that the appropriate interaction depth is 34.  With this interaction depth, the random forest model has a MAE of 11.7 and an OSR of .16.
+
+```{r, eval = FALSE}
+set.seed(99)
+train.rf <- train(Cal_amt_ng ~ . -Compound.Name -r_rundate,
+                  data = ES.train,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry=28:35),
+                  trControl = trainControl(method="cv", number=5, verboseIter = TRUE),
+                  metric = "RMSE")
+# RMSE or Rsquared doesn't matter actually -- both will be generated for regression problems
+train.rf$results
+train.rf
+best.rf <- train.rf$finalModel
+pred.best.rf <- predict(best.rf, newdata = ES.test) # can use same model matrix
+
+SSE = sum((ES.test$Cal_amt_ng - pred.best.rf)^2)
+SST = sum((ES.test$Cal_amt_ng - mean(ES.test$Cal_amt_ng))^2)
+OSR2_rf_cv = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf_cv
+
+```
+
+
+```{r, message= FALSE, warning = FALSE}
+
+ES.train.boost1 <- ES.train%>% 
+ mutate(loss__1 = as.factor(loss__1)) %>% 
+  mutate(loss__12 = as.factor(loss__12)) %>% 
+  mutate(loss__14 = as.factor(loss__14)) %>% 
+   mutate(loss__13 = as.factor(loss__13)) %>% 
+  mutate(loss__15 = as.factor(loss__15)) %>% 
+   mutate(loss__16 = as.factor(loss__16)) %>%
+   mutate(loss__18 = as.factor(loss__18)) %>% 
+  mutate(loss__2 = as.factor(loss__2)) %>% 
+  mutate(loss__22 = as.factor(loss__22)) %>%
+  mutate(loss__26 = as.factor(loss__26)) %>% 
+  mutate(loss__28 = as.factor(loss__28)) %>%
+  mutate(loss__29 = as.factor(loss__29)) %>% 
+  mutate(loss__30 = as.factor(loss__30)) %>%
+  mutate(loss__31 = as.factor(loss__31)) %>% 
+  mutate(loss__42 = as.factor(loss__42)) %>% 
+  mutate(loss__44 = as.factor(loss__44)) %>% 
+   mutate(loss__54 = as.factor(loss__54)) %>% 
+  mutate(loss__56 = as.factor(loss__56)) %>% 
+  mutate(loss__70 = as.factor(loss__70)) %>%
+  mutate(loss__74 = as.factor(loss__74)) %>% 
+  mutate(mz__113 = as.factor(mz__113)) %>% 
+  mutate(mz__117 = as.factor(mz__117)) %>% 
+  mutate(mz__129 = as.factor(mz__129)) %>%
+  mutate(mz__147 = as.factor(mz__147)) %>% 
+  mutate(mz__41 = as.factor(mz__41)) %>%
+  mutate(mz__43 = as.factor(mz__43)) %>% 
+  mutate(mz__45 = as.factor(mz__45)) %>% 
+   mutate(mz__55 = as.factor(mz__55)) %>%
+  mutate(mz__57 = as.factor(mz__57)) %>% 
+   mutate(mz__69 = as.factor(mz__69)) %>%
+  mutate(mz__71 = as.factor(mz__71)) %>%
+  mutate(mz__73 = as.factor(mz__73)) %>% 
+  mutate(mz__75 = as.factor(mz__75)) %>%
+  mutate(mz__85 = as.factor(mz__85)) %>%
+   mutate(mz__83 = as.factor(mz__83)) %>%
+  mutate(mz__81 = as.factor(mz__81)) %>%
+  mutate(mz__91 = as.factor(mz__91)) %>%
+  mutate(mz__93 = as.factor(mz__93)) %>%
+   mutate(mz__99 = as.factor(mz__99)) 
+
+ES.test.boost1 <- ES.test%>% 
+ mutate(loss__1 = as.factor(loss__1)) %>% 
+  mutate(loss__12 = as.factor(loss__12)) %>% 
+  mutate(loss__14 = as.factor(loss__14)) %>% 
+   mutate(loss__13 = as.factor(loss__13)) %>% 
+  mutate(loss__15 = as.factor(loss__15)) %>% 
+   mutate(loss__16 = as.factor(loss__16)) %>%
+   mutate(loss__18 = as.factor(loss__18)) %>% 
+  mutate(loss__2 = as.factor(loss__2)) %>% 
+  mutate(loss__22 = as.factor(loss__22)) %>%
+  mutate(loss__26 = as.factor(loss__26)) %>% 
+  mutate(loss__28 = as.factor(loss__28)) %>%
+  mutate(loss__29 = as.factor(loss__29)) %>% 
+  mutate(loss__30 = as.factor(loss__30)) %>%
+  mutate(loss__31 = as.factor(loss__31)) %>% 
+  mutate(loss__42 = as.factor(loss__42)) %>% 
+  mutate(loss__44 = as.factor(loss__44)) %>% 
+   mutate(loss__54 = as.factor(loss__54)) %>% 
+  mutate(loss__56 = as.factor(loss__56)) %>% 
+  mutate(loss__70 = as.factor(loss__70)) %>%
+  mutate(loss__74 = as.factor(loss__74)) %>% 
+  mutate(mz__113 = as.factor(mz__113)) %>% 
+  mutate(mz__117 = as.factor(mz__117)) %>% 
+  mutate(mz__129 = as.factor(mz__129)) %>%
+  mutate(mz__147 = as.factor(mz__147)) %>% 
+  mutate(mz__41 = as.factor(mz__41)) %>%
+  mutate(mz__43 = as.factor(mz__43)) %>% 
+  mutate(mz__45 = as.factor(mz__45)) %>% 
+   mutate(mz__55 = as.factor(mz__55)) %>%
+  mutate(mz__57 = as.factor(mz__57)) %>% 
+   mutate(mz__69 = as.factor(mz__69)) %>%
+  mutate(mz__71 = as.factor(mz__71)) %>%
+  mutate(mz__73 = as.factor(mz__73)) %>% 
+  mutate(mz__75 = as.factor(mz__75)) %>%
+  mutate(mz__85 = as.factor(mz__85)) %>%
+   mutate(mz__83 = as.factor(mz__83)) %>%
+  mutate(mz__81 = as.factor(mz__81)) %>%
+  mutate(mz__91 = as.factor(mz__91)) %>%
+  mutate(mz__93 = as.factor(mz__93)) %>%
+   mutate(mz__99 = as.factor(mz__99)) 
+
+
+
+
+set.seed(144)
+mod.boost <- gbm(Cal_amt_ng ~ . -r_rundate -Compound.Name,
+                 data = ES.train.boost1,
+                 distribution = "gaussian",
+                 n.trees = 1000,
+                 interaction.depth = 5)
+
+set.seed(144)
+pred.boost <- predict(mod.boost, newdata = ES.test.boost1, n.trees=1000)
+
+SSE = sum((ES.test.boost1$Cal_amt_ng - pred.boost)^2)
+SST = sum((ES.test.boost1$Cal_amt_ng - mean(ES.train.boost1$Cal_amt_ng))^2)
+OSR2_boost = 1 - SSE/SST # is this model useful at all? 
+#OSR2_boost
+
+mae_boosted <- MAE(obs = ES.test.boost1$Cal_amt_ng, pred = pred.boost)
+
+```
+The boosted model performs slightly better than the random forest model with a OSR2 of .17.  However the MAE is slightly worse at 12.6
+
+## Slope Prediction
+
+Predicting slopes by taking the slopes from predicted cal points
+
+
+
+
+```{r}
+rep.row<-function(x,n){
+   matrix(rep(x,each=n),nrow=n)
+}
+
+ind <- 2
+t_vol <- seq(from = 0, to = 100, by = 1)
+t_len <- length(t_vol)
+
+boosted_vis <- ES.train.boost1[ind,]
+
+boosted_vis.1 <- boosted_vis[rep(1, t_len),]
+
+boosted_vis.1$t_vol <- t_vol
+
+boosted_vis.2 <- boosted_vis.1 %>% 
+  mutate(Vol_norm_GLM = t_vol) 
+
+boosted.vis.pred <- predict(mod.boost, newdata = boosted_vis.2, n.trees=1000)
+
+boosted_vis.2$pred <- boosted.vis.pred
+
+boosted_vis.2 %>% 
+  ggplot(aes(x = Vol_norm_GLM, y = pred))+
+  geom_point()
+  
+
+```
+As seen before, cal curves are linear and the boosted model predictions are decidedly not linear.This means that interpolation using this method is an unwise solution and a different approach should be attempted. 
+
+
+Now trying something to generate the slope through (and r squared) for each individual cal curve
+
+
+```{r}
+
+cpnds <- cal_pts$Compound.Name[1:134]
+dates <- bt_sum$r_rundate
+
+cal_curves <- expand.grid(cpnds, dates, KEEP.OUT.ATTRS = TRUE, stringsAsFactors = FALSE)
+
+cal_curves <- distinct(cal_curves)
+
+names(cal_curves) <- c("cpnd", "dates")
+
+cal_curves$slope <- rep(-999, nrow(cal_curves))
+cal_curves$r2 <- rep(-999, nrow(cal_curves))
+
+for(i in 1:nrow(cal_curves)){
+  
+  
+  compound = cal_curves$cpnd[i]
+  day = cal_curves$dates[i]
+  
+  subset <- ES_cleaned1 %>% 
+    filter(Compound.Name == compound) %>% 
+    filter(r_rundate == day)
+  
+  if(nrow(subset)<3){
+    next
+  }
+  
+  lm_temp <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm, data = subset)
+  
+  #summary(lm_temp)
+  
+  
+  
+  slope <- as.numeric(coefficients(lm_temp))
+  
+  cal_curves$slope[i] <- slope
+  
+  
+  r2 <- summary(lm_temp)$r.squared
+  
+  cal_curves$r2[i] <- r2
+  
+  
+}
+
+real_cc <- cal_curves %>% 
+  filter(r2 > 0)
+
+hist(real_cc$r2)
+
+real_cc_withRI <- real_cc %>% 
+  left_join(cat, by= c("cpnd"= "Name")) %>% 
+  mutate(inverse_slope = 1/slope)
+
+write.csv(real_cc_withRI, file = "cal_factors3.csv")
+
+
+
+real_cc_withRI %>% ggplot(aes(x = cpnd, y = slope))+
+  geom_boxplot()
+
+
+```
+
+Looking for functions to fit for the RI or category relationships
+```{r}
+
+alkanes_tracing <- real_cc_withRI %>% 
+  filter(Func_group_cat == "Alkane")
+
+alkanes_tracing %>% ggplot(aes(x = RT1, y = 1/slope, color = dates))+
+  geom_point()
+
+ketone_tracing <- real_cc_withRI %>% 
+  filter(Func_group_cat == "Ketone")
+
+ketone_tracing %>% ggplot(aes(x = RT1, y = 1/slope, color = dates))+
+  geom_point()
+
+acid_tracing <- real_cc_withRI %>% 
+  filter(Func_group_cat == "Acid")
+
+acid_tracing %>% ggplot(aes(x = RT1, y = 1/slope, color = dates))+
+  geom_point()
+
+alcohol_tracing  <- real_cc_withRI %>% 
+  filter(Func_group_cat == "Alcohol")
+
+alcohol_tracing %>% ggplot(aes(x = RT1, y = 1/slope, color = dates))+
+  geom_point()
+
+PAH_tracing <- real_cc_withRI %>% 
+  filter(Func_group_cat == "PAH")
+
+PAH_tracing %>% ggplot(aes(x = RT1, y = 1/slope, color = dates))+
+  geom_point()
+
+
+```
+```{r}
+#fit polynomials
+
+alks <- alkanes_tracing$inverse_slope
+lr1 <- alkanes_tracing$d_alkane_RTI
+
+model <- lm(alks ~ poly(lr1,5))
+
+summary(model)
+
+plot(fitted(model),residuals(model))
+
+predicted.alk <- predict(model,data.frame(x=lr1))
+
+mod_check <- data.frame(alks, lr1, predicted.alk)
+
+mod_check %>% ggplot(aes(x = lr1, y = alks))+
+  geom_point()+
+  geom_line(aes(x = lr1, y = predicted.alk))
+
+acids <- acid_tracing$inverse_slope
+lr1 <- acid_tracing$d_alkane_RTI
+
+predicted.acid <- predict(model,data.frame(x=lr1))
+
+mod_check2 <- data.frame(acids, lr1, predicted.acid)
+
+mod_check2 %>% ggplot(aes(x = lr1, y = acids))+
+  geom_point()+
+  geom_line(aes(x = lr1, y = predicted.acid))
+
+pah <- PAH_tracing$inverse_slope
+lr1 <- PAH_tracing$d_alkane_RTI
+
+predicted.PAH <- predict(model,data.frame(x=lr1))
+
+mod_check2 <- data.frame(pah, lr1, predicted.PAH)
+
+mod_check2 %>% ggplot(aes(x = lr1, y = pah))+
+  geom_point()+
+  geom_line(aes(x = lr1, y = predicted.PAH))
+```
+
+
+
+```{r}
+
+average_slopes <- real_cc_withRI %>% 
+  group_by(cpnd) %>% 
+  summarise(avg_slope = mean(slope))
+
+average_slopes <- average_slopes %>% 
+  left_join(cat, by= c("cpnd"= "Name"))
+
+average_slopes %>% 
+  ggplot(aes(x = Retention_index, y = 1/avg_slope, color = Func_group_cat))+
+  geom_point()
+  
+
+
+
+```
+
+```{r}
+
+n <- makeup("C10H16O2")
+
+```
+
+
+
+```{r}
+# joining on the important ms info
+left_joinF <- function(x, y, fill = FALSE){
+  z <- left_join(x, y)
+  tmp <- setdiff(names(z), names(x))
+  z <- replace_na(z, setNames(as.list(rep(fill, length(tmp))), tmp))
+  z
+}
+
+colnames(wide_mz)[1] <- "cpnd"
+colnames(wide_losses)[1] <- "cpnd"
+
+names_positions <- cal_pts %>% 
+  dplyr::select(c("Compound.Name", "Library.RI", "Retention.II..sec."))
+
+cc_slopemod <- real_cc %>% 
+  left_joinF(wide_losses) %>% 
+  left_joinF(wide_mz) %>% 
+  left_join(names_positions, by = c("cpnd"= "Compound.Name")) %>% 
+  mutate(inverse_slope = 1/slope)
+
+
+
+```
+
+```{r}
+ES_slopes_boosted <- ES.test.boost1
+
+ES_slopes_boosted$boostpred <- pred.boost
+
+for(i in 1:nrow(cal_curves)){
+  
+  
+  
+  compound = cal_curves$cpnd[i]
+  day = cal_curves$dates[i]
+  
+  subset <- ES_slopes_boosted %>% 
+    filter(Compound.Name == compound) %>% 
+    filter(r_rundate == day)
+  
+  if(nrow(subset)<3){
+     cal_curves$slope_fromboostedpred[i] <- -99
+    next
+  }
+  
+  lm_temp <- lm(boostpred ~ 0 + Vol_norm_GLM, data = subset)
+  
+  #summary(lm_temp)
+  
+  
+  
+  slope <- as.numeric(coefficients(lm_temp))
+  
+  cal_curves$slope_fromboostedpred[i] <- slope
+  
+  
+  r2 <- summary(lm_temp)$r.squared
+  
+  #cal_curves$r2_fromboostedpred[i] <- r2
+  
+  
+}
+
+boosted_slopes <- cal_curves %>% 
+  filter(slope_fromboostedpred >0) %>% 
+  filter(slope > 0)
+
+RMSE_boostedslopes <- RMSE(boosted_slopes$slope_fromboostedpred, boosted_slopes$slope)
+OSR_sorta <- OSR2(boosted_slopes$slope_fromboostedpred, cal_curves$slope, boosted_slopes$slope)
+
+boosted_slopes %>% 
+  ggplot(aes(x = slope, y = slope_fromboostedpred))+
+  geom_point()
+
+boosted_slopes <- boosted_slopes %>% 
+  mutate(slopedif_pct = (slope_fromboostedpred - slope)/slope) %>% 
+  mutate(as_slopedifpct = abs(slopedif_pct)) 
+  
+
+boxplot(boosted_slopes$slopedif_pct)
+
+summary(boosted_slopes$as_slopedifpct)
+
+```
+
+This actually gives me some hope- there appear to be a few outliers which are skewing what is otherwise a not terrible approximation. 
+
+```{r}
+# not working investigate later
+# use 88
+set.seed(88)
+train.ids = sample(nrow(compound_pop), .8*nrow(compound_pop))
+slopemod_temp <- compound_pop 
+  #%>% dplyr::select(-cpnd)
+
+slopemod.train.names = slopemod_temp[train.ids,]
+
+slopemod.train <- slopemod.train.names %>% 
+  rename(cpnd = Compound.Name) %>% 
+  inner_join(cc_slopemod) 
+  
+slopemod.test.names = slopemod_temp[-train.ids,]
+
+slopemod.test <- slopemod.test.names %>% 
+  rename(cpnd = Compound.Name) %>% 
+  inner_join(cc_slopemod)
+
+set.seed(99)
+
+#table(slopemod.train$slope)
+
+slopemod.train.o = slopemod.train
+slopemod.test.o = slopemod.test
+
+#column_to_rownames(slopemod.train, 'cpnd')
+
+slopemod.train = slopemod.train.o %>% 
+  ungroup() %>% 
+  select(-cpnd) %>% 
+  select(-r2) %>% 
+  select(-comp.n) %>% 
+  select(-pct_of_samp) %>% 
+  select(-slope)
+
+slopemod.test = slopemod.test.o %>% 
+  ungroup() %>% 
+  select(-cpnd) %>% 
+  select(-r2) %>% 
+  select(-comp.n) %>% 
+  select(-pct_of_samp) %>% 
+  select(-slope)
+
+```
+
+```{r fig.width = 4, fig.height = 6}
+#library(rpart)
+#install.packages("rattle")
+library(rattle)
+
+set.seed(100)
+
+cart.mod.s <- rpart(inverse_slope ~., data = slopemod.train, method = "anova" , cp = 0.0001, minsplit = 2)
+
+#method anova does regression not classification
+## fill in the method yourselves. Might require some online searches!! 
+
+
+prp(cart.mod.s)
+
+plot(cart.mod.s)
+
+fancyRpartPlot(cart.mod.s)
+
+ggsave("cart.png")
+
+CartPredictions_s <- predict(cart.mod.s, newdata=slopemod.test)
+
+CartPredictions_train_s <- predict(cart.mod.s, newdata = slopemod.train)
+
+SSE = sum((slopemod.test$inverse_slope - CartPredictions_s)^2)
+SST = sum((slopemod.test$inverse_slope - mean(slopemod.train$inverse_slope))^2)
+OSR2_cart.s = 1 - SSE/SST # is this model useful at all? 
+OSR2_cart.s
+
+mae_cart.s <- MAE(pred = CartPredictions_s, obs = slopemod.test$slope)
+
+CART_eval <- data.frame(CartPredictions_s, slopemod.test$slope, slopemod.test.o$cpnd)
+
+CART_eval <- CART_eval %>% 
+  mutate(pcterror = 100*abs(CartPredictions_s-slopemod.test.slope)/slopemod.test.slope)
+
+summary(CART_eval$pcterror)
+
+CART_eval_train <- data.frame(CartPredictions_train_s, slopemod.train$slope, slopemod.train.o$cpnd)
+
+CART_eval_train <- CART_eval_train %>% 
+  mutate(pcterror = 100*abs(CartPredictions_train_s-slopemod.train.slope)/slopemod.train.slope)
+
+summary(CART_eval_train$pcterror)
+
+CART_eval %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 200)+
+  ylab("Percent Error")+
+  coord_cartesian(ylim=c(0, 500))+
+  labs(title = "CART Test Set Error")
+
+CART_eval_train %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 200)+
+  ylab("Percent Error")+
+  coord_cartesian(ylim=c(0, 500))+
+  labs(title = "CART Training Set Error")
+
+```
+
+
+```{r fig.width=4, fig.height=6}
+set.seed(111)
+train.rf <- train(inverse_slope ~ .,
+                  data = slopemod.train,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry=20:30),
+                  trControl = trainControl(method="cv", number=5, verboseIter = TRUE),
+                  metric = "RMSE")
+# RMSE or Rsquared doesn't matter actually -- both will be generated for regression problems
+train.rf$results
+train.rf
+best.rf <- train.rf$finalModel
+best.rf
+```
+
+
+```{r fig.width=4, fig.height=6}
+set.seed(11)
+rf.slopemod <- randomForest(inverse_slope ~ ., data = slopemod.train, mtry = 30, nodesize = 5, ntree = 5000)
+pred.best.rf.s <- predict(rf.slopemod, newdata = slopemod.test) # can use same model matrix
+pred.best.rf.s.train <- predict(rf.slopemod, newdata = slopemod.train)
+```
+
+
+```{r fig.width=4, fig.height=6}
+rf_slope_test_comparison <- data.frame(pred.best.rf.s, slopemod.test$inverse_slope, slopemod.test.o$cpnd)
+rf_slope_train_comparison <- data.frame(pred.best.rf.s.train, slopemod.train$inverse_slope, slopemod.train.o$cpnd)
+
+
+slopemod.train.slope <- slopemod.train$inverse_slope
+slopemod.test.slope <- slopemod.test$inverse_slope
+
+rf_traincomp <- rf_slope_train_comparison %>% 
+  mutate(pcterror = 100*abs(pred.best.rf.s.train-slopemod.train.slope)/slopemod.train.slope)
+
+boxplot(rf_traincomp$pcterror)
+
+
+rf_traincomp %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 200)+
+  ylab("Percent Error")+
+  coord_cartesian(ylim=c(0, 500))+
+  labs(title = "Random Forest Training Set Error")
+
+mean(rf_traincomp$pcterror)
+median(rf_traincomp$pcterror)
+summary(rf_traincomp$pcterror)
+
+histogram(rf_traincomp$pcterror)
+
+rf_traincomp %>% ggplot(aes(x = slopemod.train.slope, y = log(pcterror)))+
+  geom_point()
+
+rf_testcomp <- rf_slope_test_comparison %>% 
+  mutate(pcterror = 100*abs(pred.best.rf.s-slopemod.test.slope)/slopemod.test.slope)
+
+rf_testcomp %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 400)+
+  coord_cartesian(ylim=c(0, 500))+
+  ylab("Percent Error")+ 
+  labs(title = "Random Forest Test Set Error")
+
+boxplot(log(rf_traincomp$pcterror))
+
+mean(rf_testcomp$pcterror)
+median(rf_testcomp$pcterror)
+summary(rf_testcomp$pcterror)
+
+SSE = sum((slopemod.test$inverse_slope - pred.best.rf.s)^2)
+SST = sum((slopemod.test$inverse_slope - mean(slopemod.train$inverse_slope))^2)
+OSR2_rf_s = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf_s
+
+mae_rf.s <- MAE(pred = pred.best.rf.s, obs = slopemod.test$inverse_slope)
+```
+The slope prediction is functioning far better than the direct prediction- the random forest model (cross validated, using an mtry value of 18) has an OSR squared of .41 and a mean average error of 11.07.
+
+# trying linear modeling, using 5th degree polynomial found before
+```{r}
+
+lr1<- slopemod.test$Library.RI
+lin_1 <- predict(model,data.frame(x=lr1))
+invslope <- slopemod.test$inverse_slope
+
+test_df <- data.frame(lr1, lin_1, invslope)
+
+test_df %>% ggplot(aes(x = lr1, y = lin_1))+
+  geom_line()+
+  geom_point(aes(x = lr1, y = invslope))
+  
+
+#slopemod.test.linmod <- merge(slopemod.test, lin_1) %>% 
+#  dplyr::select(-Library.RI)
+lr1<- slopemod.test$Library.RI
+lin_2 <- predict(model,data.frame(x=lr1))
+
+temp_df <- data.frame(Library.RI = lr1, LRI_linearized = lin_2) %>% 
+  distinct()
+
+slopemod.test.linmod <- slopemod.test %>% 
+  left_join(temp_df)
+
+slopemod.test.linmod.o <- slopemod.test.linmod 
+
+
+
+lr1<- slopemod.train$Library.RI
+lin_2 <- predict(model,data.frame(x=lr1))
+
+temp_df <- data.frame(Library.RI = lr1, LRI_linearized = lin_2) %>% 
+  distinct()
+
+slopemod.train.linmod <- slopemod.train%>% 
+  left_join(temp_df) 
+
+slopemod.train.linmod.o <- slopemod.train.linmod 
+
+
+```
+
+```{r}
+
+linmod_slope <- lm(inverse_slope ~.-Library.RI, data = slopemod.train.linmod)
+summary(linmod_slope)
+
+
+predicted.lm.train <- predict(linmod_slope, slopemod.train.linmod)
+
+slopemod.train.linmod$pred_linmod_slope <- predicted.lm.train
+
+slopemod.train.linmod <- slopemod.train.linmod%>% 
+  mutate(pct_error_linmod1 = abs((pred_linmod_slope-inverse_slope)/inverse_slope)*100)
+
+slopemod.train.linmod %>% 
+  filter(Library.RI > 1400) %>% 
+  ggplot(aes(x = Library.RI, y = pct_error_linmod1))+
+  geom_point()+
+  ylim(0, 800)
+
+summary(slopemod.train.linmod$pct_error_linmod1)
+
+slopemod.train.linmod.named <- slopemod.train.linmod %>% 
+  left_join(slopemod.train.o) %>% 
+  dplyr::select(cpnd, pct_error_linmod1, Library.RI, pred_linmod_slope, inverse_slope, dates)
+
+
+##
+predicted.lm.test <- predict(linmod_slope, slopemod.test.linmod)
+
+slopemod.test.linmod$pred_linmod_slope <- predicted.lm.test
+
+slopemod.test.linmod <- slopemod.test.linmod%>% 
+  mutate(pct_error_linmod1 = abs((pred_linmod_slope-inverse_slope)/inverse_slope)*100)
+
+slopemod.test.linmod %>% 
+  filter(Library.RI > 1400) %>% 
+  ggplot(aes(x = Library.RI, y = pct_error_linmod1))+
+  geom_point()+
+  ylim(0, 800)
+
+summary(slopemod.test.linmod$pct_error_linmod1)
+
+slopemod.test.linmod.named <- slopemod.test.linmod %>% 
+  left_join(slopemod.test.o) %>% 
+  dplyr::select(cpnd, pct_error_linmod1, Library.RI, pred_linmod_slope, inverse_slope, dates)
+
+
+```
+# trying random forest using the linearized RI (maybe this will help?)
+
+```{r}
+set.seed(111)
+train.rf <- train(inverse_slope ~ .,
+                  data = slopemod.train.linmod.o,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry=20:30),
+                  trControl = trainControl(method="cv", number=5, verboseIter = TRUE),
+                  metric = "RMSE")
+# RMSE or Rsquared doesn't matter actually -- both will be generated for regression problems
+train.rf$results
+```
+
+
+```{r}
+set.seed(11)
+rf.slopemod_lin <- randomForest(inverse_slope ~ ., data = slopemod.train.linmod.o, mtry = 30, nodesize = 5, ntree = 5000)
+
+summary(rf.slopemod_lin)
+
+pred.best.rf.s_lin <- predict(rf.slopemod_lin, newdata = slopemod.test.linmod.o) # can use same model matrix
+pred.best.rf.s.train_lin <- predict(rf.slopemod_lin, newdata = slopemod.train.linmod.o)
+
+slopemod.test.linmod.named$pred_rf_slope <- pred.best.rf.s_lin
+
+slopemod.train.linmod.named$pred_rf_slope <- pred.best.rf.s.train_lin
+
+slopemod.train.linmod.named <- slopemod.train.linmod.named %>% 
+  mutate(pct_error_rf1 = abs((pred_rf_slope-inverse_slope)/inverse_slope)*100)
+
+slopemod.test.linmod.named <- slopemod.test.linmod.named %>% 
+  mutate(pct_error_rf1 = abs((pred_rf_slope-inverse_slope)/inverse_slope)*100)
+
+summary(slopemod.test.linmod.named$pct_error_rf1)
+
+summary(slopemod.train.linmod.named$pct_error_rf1)
+
+```
+
+
+
+
+```{r}
+
+slopemod.train.goodr <- slopemod.train 
+#%>% 
+  #filter(r2>.7)
+
+slopemod.test.goodr <- slopemod.test 
+  #%>% 
+  #filter(r2>.7)
+```
+
+Next, other values of mtry are evaluated for performance for comparison to the mtry indicated by cross validation. 
+
+```{r}
+
+
+set.seed(111)
+mod.rf1 <- randomForest(slope ~., data = slopemod.train.goodr, mtry = 2, nodesize = 5, ntree = 1000)
+
+pred.rf.s2 <- predict(mod.rf1, newdata = slopemod.test.goodr)
+
+
+
+RFPredictions.s2 <- predict(mod.rf1, newdata = slopemod.test.goodr)
+
+
+#SSE = sum((slopemod.test.goodr$slope - RFPredictions)^2)
+#SST = sum((slopemod.test.goodr$slope - mean(slopemod.test.goodr$slope))^2)
+#OSR2_rf_s2 = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf_s2= OSR2(RFPredictions.s2, slopemod.train.goodr$slope, slopemod.test.goodr$slope)
+OSR2_rf_s2
+
+mae_rf.s2 <- MAE(pred = RFPredictions.s2, obs = slopemod.test$slope)
+
+
+```
+A low value of mtry creates generates predictions with a higher OSR squared, but a slightly worse mae indicating that performance has not in fact improved as much as the high OSR squared would indicate. 
+
+### Visualizing random forest slope prediction performance
+```{r}
+#appending on table of predictions
+slopemod.test.withpred <- slopemod.test.o 
+
+slopemod.test.withpred$rf_slope <- pred.best.rf.s
+
+slopemod.test.withpred <- slopemod.test.withpred %>% 
+  mutate(rf_slope_dif = abs(slope-rf_slope))
+
+for(i in 1:nrow(cal_pts)){
+
+  bid_temp <- cal_pts$Compound.Name[i]
+
+  n_c_full_sub <- slopemod.test.withpred %>% 
+    filter(cpnd == bid_temp)
+
+  p <- n_c_full_sub %>% 
+    ggplot(aes(x = slope, y = rf_slope, color = as.factor(dates), size = cpnd))+
+    geom_point()
+  
+  print(p)
+}
+
+```
+
+```{r}
+#different way to visualize
+
+rf_vis <- slopemod.test.withpred %>% 
+  dplyr::select(cpnd, dates, slope, rf_slope, r2) %>% 
+  gather(key = slope_cat, value = slope, slope, rf_slope)
+  
+
+for(i in 1:nrow(cal_pts)){
+
+  bid_temp <- cal_pts$Compound.Name[i]
+
+  n_c_full_sub <- rf_vis %>% 
+    filter(cpnd == bid_temp)
+
+  p <- n_c_full_sub %>% 
+    ggplot(aes(x = dates, y = slope, shape = as.factor(slope_cat), color = r2, size = cpnd))+
+    geom_point()
+  
+  print(p)
+}
+ 
+
+
+```
+Viewing the predicted and actual slopes of the test set for the different times during the campaign indicates that for some the predictive capabilities are far better than for others.
+
+## Return to Linear Modeling Possibilities
+As the relationship between the ingected and perceived volumes is presumed to be linear, a logical choice would be to improve the factor treatment to make a linear model perform better. A first take on the poor performance of the linear model is that the retention times are important but not in a linear fashion- this hypothesis is now explored. 
+Visualizing slopes as a function of the retention times
+```{r}
+slopemod.test.withpred %>% 
+  ggplot(aes(x = Library.RI, y = slope)) +
+  geom_point()
+
+slopemod.test.withpred %>% 
+  ggplot(aes(x = Retention.II..sec., y = slope)) +
+  geom_point()
+
+```
+The second retention time appears to follow a basically exponential decay, but the first retention time does not appear to adhere to any pattern that would be easily represented in a transformation for linear modeling.  
+
+
+```{r}
+ES.train.boost.s <- slopemod.train%>% 
+   mutate(loss__1 = as.factor(loss__1)) %>% 
+  mutate(loss__12 = as.factor(loss__12)) %>% 
+  mutate(loss__14 = as.factor(loss__14)) %>% 
+   mutate(loss__13 = as.factor(loss__13)) %>% 
+  mutate(loss__15 = as.factor(loss__15)) %>% 
+   mutate(loss__16 = as.factor(loss__16)) %>%
+   mutate(loss__18 = as.factor(loss__18)) %>% 
+  mutate(loss__2 = as.factor(loss__2)) %>% 
+  mutate(loss__22 = as.factor(loss__22)) %>%
+  mutate(loss__26 = as.factor(loss__26)) %>% 
+  mutate(loss__28 = as.factor(loss__28)) %>%
+  mutate(loss__29 = as.factor(loss__29)) %>% 
+  mutate(loss__30 = as.factor(loss__30)) %>%
+  mutate(loss__31 = as.factor(loss__31)) %>% 
+  mutate(loss__42 = as.factor(loss__42)) %>% 
+  mutate(loss__44 = as.factor(loss__44)) %>% 
+   mutate(loss__54 = as.factor(loss__54)) %>% 
+  mutate(loss__56 = as.factor(loss__56)) %>% 
+  mutate(loss__70 = as.factor(loss__70)) %>%
+  mutate(loss__74 = as.factor(loss__74)) %>% 
+  mutate(mz__105 = as.factor(mz__105)) %>% 
+  mutate(mz__113 = as.factor(mz__113)) %>% 
+  mutate(mz__117 = as.factor(mz__117)) %>% 
+  mutate(mz__129 = as.factor(mz__129)) %>%
+  mutate(mz__147 = as.factor(mz__147)) %>% 
+  mutate(mz__41 = as.factor(mz__41)) %>%
+  mutate(mz__45 = as.factor(mz__45)) %>%
+  mutate(mz__43 = as.factor(mz__43)) %>% 
+   mutate(mz__55 = as.factor(mz__55)) %>%
+  mutate(mz__57 = as.factor(mz__57)) %>% 
+   mutate(mz__69 = as.factor(mz__69)) %>%
+  mutate(mz__71 = as.factor(mz__71)) %>%
+  mutate(mz__73 = as.factor(mz__73)) %>% 
+  mutate(mz__75 = as.factor(mz__75)) %>%
+  mutate(mz__85 = as.factor(mz__85)) %>%
+   mutate(mz__83 = as.factor(mz__83)) %>%
+  mutate(mz__81 = as.factor(mz__81)) %>%
+  mutate(mz__91 = as.factor(mz__91)) %>%
+  mutate(mz__93 = as.factor(mz__93)) %>%
+   mutate(mz__99 = as.factor(mz__99)) %>% 
+   mutate(dates = as.numeric(dates))
+
+ES.test.boost.s <- slopemod.test%>% 
+    mutate(loss__1 = as.factor(loss__1)) %>% 
+  mutate(loss__12 = as.factor(loss__12)) %>% 
+  mutate(loss__14 = as.factor(loss__14)) %>% 
+   mutate(loss__13 = as.factor(loss__13)) %>% 
+  mutate(loss__15 = as.factor(loss__15)) %>% 
+   mutate(loss__16 = as.factor(loss__16)) %>%
+   mutate(loss__18 = as.factor(loss__18)) %>% 
+  mutate(loss__2 = as.factor(loss__2)) %>% 
+  mutate(loss__22 = as.factor(loss__22)) %>%
+  mutate(loss__26 = as.factor(loss__26)) %>% 
+  mutate(loss__28 = as.factor(loss__28)) %>%
+  mutate(loss__29 = as.factor(loss__29)) %>% 
+  mutate(loss__30 = as.factor(loss__30)) %>%
+  mutate(loss__31 = as.factor(loss__31)) %>% 
+  mutate(loss__42 = as.factor(loss__42)) %>% 
+  mutate(loss__44 = as.factor(loss__44)) %>% 
+   mutate(loss__54 = as.factor(loss__54)) %>% 
+  mutate(loss__56 = as.factor(loss__56)) %>% 
+  mutate(loss__70 = as.factor(loss__70)) %>%
+  mutate(loss__74 = as.factor(loss__74)) %>% 
+   mutate(mz__105 = as.factor(mz__105)) %>% 
+  mutate(mz__113 = as.factor(mz__113)) %>% 
+  mutate(mz__117 = as.factor(mz__117)) %>% 
+  mutate(mz__129 = as.factor(mz__129)) %>%
+  mutate(mz__147 = as.factor(mz__147)) %>% 
+  mutate(mz__41 = as.factor(mz__41)) %>%
+  mutate(mz__45 = as.factor(mz__45)) %>%
+  mutate(mz__43 = as.factor(mz__43)) %>% 
+   mutate(mz__55 = as.factor(mz__55)) %>%
+  mutate(mz__57 = as.factor(mz__57)) %>% 
+   mutate(mz__69 = as.factor(mz__69)) %>%
+  mutate(mz__71 = as.factor(mz__71)) %>%
+  mutate(mz__73 = as.factor(mz__73)) %>% 
+  mutate(mz__75 = as.factor(mz__75)) %>%
+  mutate(mz__85 = as.factor(mz__85)) %>%
+   mutate(mz__83 = as.factor(mz__83)) %>%
+  mutate(mz__81 = as.factor(mz__81)) %>%
+  mutate(mz__91 = as.factor(mz__91)) %>%
+  mutate(mz__93 = as.factor(mz__93)) %>%
+   mutate(mz__99 = as.factor(mz__99)) %>% 
+  mutate(dates = as.numeric(dates))
+
+```
+
+```{r}
+
+set.seed(144)
+mod.boost <- gbm(slope ~ .,
+                 data = ES.train.boost.s,
+                 distribution = "gaussian",
+                 n.trees = 1000,
+                 interaction.depth = 15)
+
+set.seed(144)
+pred.boost <- predict(mod.boost, newdata = ES.test.boost.s, n.trees=1000)
+
+SSE = sum((ES.test.boost.s$slope - pred.boost)^2)
+SST = sum((ES.test.boost.s$slope - mean(ES.train.boost.s$slope))^2)
+OSR2_boost = 1 - SSE/SST # is this model useful at all? 
+
+OSR2_boost_slope = OSR2(pred.boost, ES.train.boost.s$slope, ES.test.boost.s$slope)
+#OSR2_boost_slope
+
+mae_boosted.s <- MAE(obs = ES.test.boost.s$slope, pred = pred.boost)
+```
+A boosted model for the slopes performs slightly worse than the random forest model- the OSR squared is .35 and the MAE is 15.6.
+
+For future model assessment, a tables are created indicating which compounds are well predicted and which are poorly predicted. This will hopefully enable assessment of why some compounds are being predicted so much more accurately than others.
+
+```{r}
+
+pred <- pred.boost
+slope <- ES.test.boost.s$slope
+cpnd <- slopemod.test.o$cpnd
+
+r2 <- ES.test.boost.s$r2
+
+#comp <- data.frame(pred, slope, cpnd, r2)
+comp <- data.frame(pred, slope, cpnd)
+
+comp <- comp %>% 
+  mutate(diff = abs(pred-slope)) %>% 
+  mutate(pctdiff = diff/pred)
+
+
+comp_badfit <- comp %>% 
+  filter(pctdiff > 1)
+
+table(comp_badfit$cpnd)
+
+comp_goodfit <- comp %>% 
+  filter(pctdiff < .5)
+
+table(comp_goodfit$cpnd)
+  
+
+#comp_badfit %>% 
+  #ggplot(aes(x = abs(pred-slope), y = r2, color = cpnd))+
+  #geom_point()
+
+```
+
+```{r, eval = FALSE}
+
+test_slopes <- ES.test.boost.s %>% 
+  dplyr::select(cpnd, slope, r2, dates)
+
+test_slopes$pslope <- RFPredictions
+
+test_slopes <- test_slopes %>% 
+  mutate(dates = as.Date(dates, origin = "1970-01-01"))
+
+
+Es.test.withslopes <- ES.test %>% 
+  left_join(test_slopes, by = c("Compound.Name"= "cpnd", "r_rundate" ="dates"))
+
+```
+
+
+## TRYING TO FIGURE OUT NEAREST NEIGHBORS
+
+As none of the previous methods achieved acceptably high performance, moving forward the best option would likely be assignment to an external standard by nearest neighbors.  This option is preliminarily examined in the following section and will be farther explored before a final method for external calibration is selected. 
+
+```{r}
+cal_curves_trimmed <- cal_curves %>% 
+  filter(slope > 0)
+
+#cal_curves_t_slopes <- column_to_rownames(cal_curves_trimmed, 'cpnd')
+
+cal_curves_t_slopes <- cal_curves_trimmed %>%
+  mutate(logslope = log(slope)) %>% 
+  dplyr::select(logslope)
+
+wss <- (nrow(cal_curves_trimmed)-1)*sum(apply(cal_curves_t_slopes,2,var))
+
+for (i in 2:15) wss[i] <- sum(kmeans(cal_curves_t_slopes,
+   centers=i)$withinss)
+
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
+
+
+```
+from this it appears that there are really only 4 categories that I should be using
+```{r}
+
+fit <- kmeans(cal_curves_t_slopes, 4) # 5 cluster solution
+# get cluster means
+aggregate(cal_curves_t_slopes,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(cal_curves_trimmed, fit$cluster)
+```
+not sure if that did anything
+
+```{r, eval = FALSE}
+#install.packages("RANN")
+library(RANN)
+#install.packages("FNN")
+library(FNN)
+
+#note: c7 acid has no RI
+
+locations <- cat %>% 
+  mutate(rt2scale = RT2 * 1000) %>% 
+  dplyr::select(Name, d_alkane_RTI, rt2scale) %>% 
+  filter(!is.na(d_alkane_RTI))
+
+locations_t <- locations %>% 
+  dplyr::select(-Name)
+
+test <- locations[2:3]
+closest <- nn2(locations[2:3], k=3)
+
+closest_2 <- closest$nn.idx[,2:3]
+
+colnames(closest_2) <- c("n1_index","n2_index")
+
+locations <- cbind(locations, closest_2)
+
+locations <- locations %>% 
+  mutate(n1 = Name) %>% 
+  mutate(n2 = Name)
+
+for(i in 1:nrow(locations)){
+  n1_index <- locations$n1_index[i]
+  n2_index <- locations$n2_index[i]
+  
+  locations$n1[i] <- locations$Name[n1_index]
+  locations$n2[i] <- locations$Name[n2_index]
+  
+}
+
+#closest <- nn2(locations_t, k = 2, searchtype = "radius", radius = 0.001)
+closest <- sapply(closest, cbind) %>% as_tibble
+
+k <- knn(locations_t, locations_t, labels, k = 2, algorithm="cover_tree")
+indices <- attr(k, "nn.index")
+```
+
+```{r, eval = FALSE}
+merged_cal_curves <- cal_curves %>% 
+  filter(slope > 0) %>% 
+  group_by(cpnd) %>% 
+  summarise(meanSlope = mean(slope)) %>% 
+  left_join(locations, by = c("cpnd"= "Name"))
+
+```
+Notes on future steps: 
+try k nearest neighbors
+but kmeans miht be better with small dataset
+take slope of predicted based on the random forest- will be better, more data
+
+## Now trying with a normalized by normalized IS version
+
+```{r}
+
+
+
+```
+
