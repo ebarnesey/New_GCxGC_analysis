@@ -55,7 +55,7 @@ library(rpart.plot) # CART plotting
 
 #install.packages("CHNOSZ")
 library(CHNOSZ)
-
+makeup("C4H19Si")
 
 #library(asbio)
 #library(tmap)         # raster + vector layers
@@ -385,7 +385,7 @@ Dropped_compounds <- read_csv("to_exclude.csv") %>%
   filter(exclude_tag == TRUE) %>% 
   dplyr::select(-c(exclude_tag, reason))
 
-#rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
+rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
 
 # creating a column of the differences in linear retention indecies so that poor matches can be screened out
 M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
@@ -947,8 +947,8 @@ Problematic cal curve points must be manually removed- as no single cal point is
 
 ```{r}
 
-rows_todrop1 <- n_c_full %>% 
-  filter(Cal_Point == 5)
+#rows_todrop1 <- n_c_full %>% 
+ # filter(Cal_Point == 5)
 
 rows_todrop1 <- n_c_full %>% 
   filter((Compound.Name == "maltol" & Cal_Point == "Cal_pt_6" & r_rundate == "2018-11-27") |
@@ -1016,7 +1016,7 @@ ES_for_quant <- ES_withcat %>%
 #ES.train = ES_for_quant[train.ids,]
 #ES.test = ES_for_quant[-train.ids,]
 
-set.seed(186)
+set.seed(188)
 train.ids2 = sample(nrow(Cat_trimmed), .7*nrow(Cat_trimmed))
 train_names = Cat_trimmed[train.ids2,] %>% 
   dplyr::select(Name) %>% 
@@ -1040,10 +1040,12 @@ ES.train.withname <- ES.train
 ES.test.withname <- ES.test
 
 ES.train_lm1 <- ES.train %>% 
+  ungroup() %>% 
   dplyr::select(-Compound.Name) %>% 
   dplyr::select(-r_rundate)
 
 ES.test_lm1 <- ES.test %>% 
+  ungroup() %>% 
   dplyr::select(-Compound.Name) %>% 
   dplyr::select(-r_rundate)
 
@@ -1553,7 +1555,7 @@ This actually gives me some hope- there appear to be a few outliers which are sk
 ```{r}
 # not working investigate later
 # use 88
-set.seed(88)
+set.seed(87)
 train.ids = sample(nrow(compound_pop), .8*nrow(compound_pop))
 slopemod_temp <- compound_pop 
   #%>% dplyr::select(-cpnd)
@@ -1847,7 +1849,7 @@ train.rf$results
 
 ```{r}
 set.seed(11)
-rf.slopemod_lin <- randomForest(inverse_slope ~ ., data = slopemod.train.linmod.o, mtry = 30, nodesize = 5, ntree = 5000)
+rf.slopemod_lin <- randomForest(inverse_slope ~ ., data = slopemod.train.linmod.o, mtry = 27, nodesize = 5, ntree = 5000)
 
 summary(rf.slopemod_lin)
 
@@ -1867,6 +1869,53 @@ slopemod.test.linmod.named <- slopemod.test.linmod.named %>%
 summary(slopemod.test.linmod.named$pct_error_rf1)
 
 summary(slopemod.train.linmod.named$pct_error_rf1)
+
+```
+
+## Adding in chemical formula info
+
+```{r}
+formulae<- read_csv("Categories_ES_withformula.csv") %>% 
+  dplyr::select(cpnd, Formula) %>% 
+  mutate(C_num = -999) %>% 
+  mutate(H_num = -999) %>% 
+  mutate(N_num = -999) %>% 
+  mutate(O_num = -999) %>% 
+  mutate(S_num = -999) %>% 
+  mutate(Si_num = -999) 
+
+empty_f_names <- data.frame("C"= 0, "H" = 0, "O"= 0, "N"= 0, "S"= 0, "Si"= 0)
+empty_t <- t(empty_f_names)
+
+for(i in 1:nrow(formulae)){
+  form_t <- formulae$Formula[i]
+  #form_t <- "C10H2O3Si12"
+   
+  l_c <- data.frame(makeup(form_t))
+  
+  ll_c <- data.frame(t(l_c)) %>% 
+    full_join(empty_f_names)
+    
+    
+  formulae$C_num[i] <- as.integer(ll_c$C[[1]]) 
+  formulae$H_num[i] <- as.integer(ll_c$H[[1]]) 
+  formulae$O_num[i] <- as.integer(ll_c$O[[1]]) 
+  formulae$N_num[i] <- as.integer(ll_c$N[[1]]) 
+  formulae$S_num[i] <- as.integer(ll_c$S[[1]]) 
+  formulae$Si_num[i] <- as.integer(ll_c$Si[[1]]) 
+  
+}
+ 
+formulae[is.na(formulae)] <- 0
+
+formulae <- formulae %>% 
+  mutate(H_to_C = H_num / C_num) %>% 
+  mutate(O_to_C = O_num/C_num)
+
+```
+
+
+```{r}
 
 ```
 

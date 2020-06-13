@@ -1,4 +1,4 @@
-Name,RT1,RT2,Retention_index,d_alkane_RTI,Func_group_cat,Formula
+cpnd,RT1,RT2,Retention_index,d_alkane_RTI,Func_group_cat,Formula
 "12-OH C18 Acid, TMS",62.29498523,0.69834695,2470,2470.175439,Acid,C24H52O3Si2
 "16-OH C16 Acid, TMS",61.4192249,0.688370565,2429,2429.824561,Acid,C22H48O3Si2
 "2-Ketoglutaric acid, tri-TMS",39.90598202,0.7981108,1629,1629.268293,Acid,C14H30O5Si3
