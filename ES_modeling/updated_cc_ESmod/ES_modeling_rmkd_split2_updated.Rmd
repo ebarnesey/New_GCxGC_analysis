@@ -1916,9 +1916,67 @@ formulae <- formulae %>%
 
 
 ```{r}
+ES.linmod.train_n_f <- slopemod.train.linmod.named %>% 
+  left_join(formulae, by = "cpnd")
+
+ES.linmod.test_n_f <- slopemod.test.linmod.named %>% 
+  left_join(formulae, by = "cpnd")
+
+ES.linmod.train.f <- ES.linmod.train_n_f %>% 
+  dplyr::select(-cpnd, -pct_error_linmod1, -pred_linmod_slope, -pred_rf_slope, -pct_error_rf1, -Formula) %>% 
+  left_join(slopemod.train.linmod.o)
+
+ES.linmod.test.f <- ES.linmod.test_n_f %>% 
+  dplyr::select(-cpnd, -pct_error_linmod1, -pred_linmod_slope, -pred_rf_slope, -pct_error_rf1, -Formula) %>% 
+  left_join(slopemod.test.linmod.o)
+
+
 
 ```
+trying linear modeling including the formula
+```{r}
+linmod_slope_form <- lm(inverse_slope ~.-Library.RI, data = ES.linmod.train.f)
+summary(linmod_slope_form)
 
+linmod_slope_form2 <- lm(inverse_slope ~dates, C_num, Si_num, O_to_C, loss_12, loss_14, loss_42, loss_70, mz_45, mz_81, LRI_linearized, data = ES.linmod.train.f)
+summary(linmod_slope_form)
+
+
+
+```
+linmod not promising trying rf instead
+```{r}
+
+set.seed(11)
+rf.slopemod_lin_f <- randomForest(inverse_slope ~ ., data = ES.linmod.train.f, mtry = 27, nodesize = 5, ntree = 5000)
+
+summary(rf.slopemod_lin_f)
+
+pred.best.rf.s_lin_f <- predict(rf.slopemod_lin_f, newdata = ES.linmod.test.f) # can use same model matrix
+pred.best.rf.s.train_lin_f <- predict(rf.slopemod_lin_f, newdata = ES.linmod.train.f)
+
+slopemod.test.linmod.named$pred_rf_slope_f <- pred.best.rf.s_lin_f
+
+slopemod.train.linmod.named$pred_rf_slope_f <- pred.best.rf.s.train_lin_f
+
+slopemod.train.linmod.named <- slopemod.train.linmod.named %>% 
+  mutate(pct_error_rf_f = abs((pred_rf_slope_f-inverse_slope)/inverse_slope)*100)
+
+slopemod.test.linmod.named <- slopemod.test.linmod.named %>% 
+  mutate(pct_error_rf_f = abs((pred_rf_slope_f-inverse_slope)/inverse_slope)*100)
+
+summary(slopemod.test.linmod.named$pct_error_rf_f)
+
+boxplot(slopemod.test.linmod.named$pct_error_rf_f)
+
+summary(slopemod.train.linmod.named$pct_error_rf_f)
+
+bigger_ish <- slopemod.test.linmod.named %>% 
+  filter(Library.RI > 1400)
+
+summary(bigger_ish$pct_error_rf_f)
+
+```
 
 
 
