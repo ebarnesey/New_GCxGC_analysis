@@ -922,6 +922,25 @@ library(plot.matrix)
 ```
 ## Visualizing timelines
 
+## gettiung just the tracers for Lindsay
+
+```{r}
+only_tracers_LY <- M_t_analyte_unique_IS %>% 
+  filter(Compound.Name == "1221_0832_blob_5" | Compound.Name == "1221_0832_blob_48"
+         |Compound.Name == "1202_1412_blob_1" | Compound.Name == "1202_1412_blob_766") %>% 
+  mutate(Vol_israwnorm_punchnorm = vol_is_rawnorm/Filter_punches) %>% 
+  mutate(Vol_isnormnorm_punchnorm = vol_is_normnorm/Filter_punches)
+
+only_tracers_LY %>% 
+  ggplot(aes(x = r_date, y = Punch_norm_vol, color = Compound.Name))+
+  geom_point()
+
+write.csv(only_tracers_LY, file = "Tracers_for_Lindsay.csv")
+
+
+```
+
+
 ## Cumulative dist using IS normalized vol
 
 ```{r}

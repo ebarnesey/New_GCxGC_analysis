@@ -227,7 +227,8 @@ cat <- read_csv("Categories_ES.csv")
 Cat_full <- cat %>% 
   left_join(wide_losses, by = c("Name" = "names_losses")) %>% 
   left_join(wide_mz) %>% 
-  mutate(Func_group_cat = as.factor(Func_group_cat)) 
+  mutate(Func_group_cat = as.factor(Func_group_cat)) %>% 
+  dplyr::select(-Formula, -Mass)
 
 Cat_full[is.na(Cat_full)] <- FALSE
 
@@ -369,7 +370,7 @@ The raw blob tables may contain a variety of false matches (aka compounds labele
 
 ```{r match_finding, message =FALSE}
 # filtering out bad LRI matches
-Match_factor_floor <- 750
+Match_factor_floor <- 700
 Reverse_match_factor_floor <- 800
 LRI_diff_floor <- 10
 

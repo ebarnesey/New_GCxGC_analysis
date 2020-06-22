@@ -1,10 +1,10 @@
-cpnd,RT1,RT2,Retention_index,d_alkane_RTI,Func_group_cat,Formula,,"comparison of slope based on nearest d alk, person selected, and my method"
+cpnd,RT1,RT2,Retention_index,d_alkane_RTI,Func_group_cat,Formula,,
 "12-OH C18 Acid, TMS",62.29498523,0.69834695,2470,2470.175439,Acid,C24H52O3Si2,,
-"16-OH C16 Acid, TMS",61.4192249,0.688370565,2429,2429.824561,Acid,C22H48O3Si2,,
-"2-Ketoglutaric acid, tri-TMS",39.90598202,0.7981108,1629,1629.268293,Acid,C14H30O5Si3,,
-3-5-dimethoxyphenol,36.4029407,0.87792188,1525,1525.68306,Alcohol,C11H18O3Si,,
-"4, 4 dimethoxy-benzophenone",58.25887241,1.446575825,2293,2293.548387,Ketone,C15H14O3,,
-4-hydroxybenzoic acid,40.59135967,0.887898265,1651,1651.219512,Acid,C13H22O3Si2,,
+"16-OH C16 Acid, TMS",61.4192249,0.688370565,2429,2429.824561,Acid,C22H48O3Si2,,timelines for preliminary source apportionment tracers
+"2-Ketoglutaric acid, tri-TMS",39.90598202,0.7981108,1629,1629.268293,Acid,C14H30O5Si3,,how quantifications were done- haofei
+3-5-dimethoxyphenol,36.4029407,0.87792188,1525,1525.68306,Alcohol,C11H18O3Si,,look up donna something
+"4, 4 dimethoxy-benzophenone",58.25887241,1.446575825,2293,2293.548387,Ketone,C15H14O3,,ask allen about publishing on quant
+4-hydroxybenzoic acid,40.59135967,0.887898265,1651,1651.219512,Acid,C13H22O3Si2,,tracer timelines
 4-nitrocatechol,44.28478367,1.566292445,1769,1769.512195,Cat,C12H21NO4Si2,,
 4-terpineol ,23.87576033,0.77815803,1206,1206.678663,Alcohol,C13H26OSi,,
 9H-Florenone,44.55131942,1.386717515,1778,1778.04878,Ketone,C13H8O,,
