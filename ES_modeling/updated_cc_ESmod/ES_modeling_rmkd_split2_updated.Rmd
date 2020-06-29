@@ -685,7 +685,10 @@ Note- moving forward, before doing the correction between ES and sample, must tr
 
 ## Trying the internal standard nearest normalized by the average of that IS
 ```{r}
-IS_positions_avg <- read.csv("IS_positions_avg.csv")
+IS_positions_avg <- read.csv("IS_positions_avg.csv") %>% 
+  filter(!(Compound.Name== "methoxyphenol-d3")) %>% 
+  filter(!(Compound.Name == "glucose-13C6")) 
+  
 
 IS_unique <- IS_goodmatch %>% 
   group_by(Compound.Name, File_num) %>% 
@@ -780,18 +783,33 @@ Analyte_pos_short <- Analyte_positions %>%
 IS_pos_short <- IS_positions_avg %>% 
   select(relative_LRI, relative_LRI2)
 
+IS_pos_short_dalk <- IS_positions_avg %>% 
+  filter(startsWith(Compound.Name, 'dC'))%>% 
+  select(relative_LRI, relative_LRI2)
+
+IS_positions_avg_dalk <- IS_positions_avg %>% 
+  filter(startsWith(Compound.Name, 'dC'))
+
 #knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
 
 testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 1)
 
+testnn_dalk <- nn2(IS_pos_short_dalk, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=1, radius = 2)
+
 Analyte_IS_Index <- data.frame(testnn$nn.idx)
 
-Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3)
+Analyte_IS_Index_dalk <- data.frame(testnn_dalk$nn.idx)
+
+Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3, IS_index_dalk = Analyte_IS_Index_dalk$testnn_dalk.nn.idx)
+
+Manual_IS_assignments <- read_csv("Manual_IS_assignments.csv")
 
 Analyte_with_IS <- Analyte_pos_ad %>% 
   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
-  mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
+  mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3]) %>% 
+  mutate(IS_appropriate_dalk =IS_positions_avg_dalk$Compound.Name[IS_index_dalk]) %>% 
+  left_join(Manual_IS_assignments)
 
 # Analyte_with_IS <- Analyte_pos_ad %>% 
 #   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[1]) %>% 
@@ -824,11 +842,14 @@ Analyte_with_IS <- Analyte_pos_ad %>%
 # }
 
 
+
 Analyte_with_IS_positions <- Analyte_with_IS %>% 
   left_join(Analyte_positions) %>% 
   left_join(IS_positions_avg, by = c("IS_appropriate1"= "Compound.Name")) %>% 
   left_join(IS_positions_avg, by = c("IS_appropriate2"= "Compound.Name")) %>% 
-  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name")) 
+  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate_dalk"= "Compound.Name")) %>% left_join(IS_positions_avg, by = c("Manual_IS"= "Compound.Name"))
+  
   
 
 M_t_analyte_withIS <- M_t_analyte_unique %>% 
@@ -838,7 +859,11 @@ M_t_analyte_withIS <- M_t_analyte_unique %>%
   mutate(IS_vol2= -999*(LRI.I/LRI.I)) %>% 
   mutate(IS_mean_norm2= -999*(LRI.I/LRI.I)) %>% 
   mutate(IS_vol3= -999*(LRI.I/LRI.I)) %>% 
-  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I))  
+  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol_dalk= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm_dalk= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol_man= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm_man= -999*(LRI.I/LRI.I)) 
 
 for(i in 1:nrow(M_t_analyte_withIS)){
   
@@ -846,6 +871,9 @@ for(i in 1:nrow(M_t_analyte_withIS)){
   IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
   IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
   IS_name3 = M_t_analyte_withIS$IS_appropriate3[i]
+  
+  IS_name_dalk = M_t_analyte_withIS$IS_appropriate_dalk[i]
+  IS_name_man = M_t_analyte_withIS$Manual_IS[i]
   
   
   
@@ -872,6 +900,20 @@ for(i in 1:nrow(M_t_analyte_withIS)){
   M_t_analyte_withIS$IS_vol3[i] <-IS_indicated3$Volume_tot[1]
   M_t_analyte_withIS$IS_mean_norm3[i] <-IS_indicated3$IS_mean_norm[1]
   
+  IS_indicated_dalk <- IS_stability %>% 
+    filter(Compound.Name == IS_name_dalk) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol_dalk[i] <-IS_indicated_dalk$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm_dalk[i] <-IS_indicated_dalk$IS_mean_norm[1]
+  
+  IS_indicated_man <- IS_stability %>% 
+    filter(Compound.Name == IS_name_man) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol_man[i] <-IS_indicated_man$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm_man[i] <-IS_indicated_man$IS_mean_norm[1]
+  
 }
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
@@ -880,7 +922,13 @@ M_t_analyte_withIS <- M_t_analyte_withIS %>%
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
-  mutate(vol_is_rawnorm = Volume/IS_vol)
+  mutate(vol_is_rawnorm = Volume/IS_vol) %>% 
+  mutate(vol_is_normnorm_1 = Volume/IS_mean_norm1) %>% 
+  mutate(vol_is_rawnorm_1 = Volume/IS_vol1) %>% 
+  mutate(vol_is_normnorm_dalk = Volume/IS_mean_norm_dalk) %>% 
+  mutate(vol_is_rawnorm_dalk = Volume/IS_vol_dalk) %>% 
+  mutate(vol_is_normnorm_man = Volume/IS_mean_norm_man) %>% 
+  mutate(vol_is_rawnorm_man = Volume/IS_vol_man)  
 ```
 
 
@@ -919,7 +967,7 @@ for(i in 1:nrow(cal_pts)){
     ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
     geom_point()
   
-  print(p)
+  #print(p)
 }
 
 
@@ -933,7 +981,7 @@ bid_tempj <- cal_pts$Compound.Name[j]
     filter(Compound.Name == bid_tempj)
 
   pp <- n_c_full_subj %>% 
-    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
     geom_point()+
     xlab("Calibration Amount (ng)")+
     ylab("Instrument Volume Response")
@@ -1308,6 +1356,15 @@ names(cal_curves) <- c("cpnd", "dates")
 cal_curves$slope <- rep(-999, nrow(cal_curves))
 cal_curves$r2 <- rep(-999, nrow(cal_curves))
 
+cal_curves$slope_1 <- rep(-999, nrow(cal_curves))
+cal_curves$r2_1 <- rep(-999, nrow(cal_curves))
+
+cal_curves$slope_dalk <- rep(-999, nrow(cal_curves))
+cal_curves$r2_dalk <- rep(-999, nrow(cal_curves))
+
+cal_curves$slope_man <- rep(-999, nrow(cal_curves))
+cal_curves$r2_man <- rep(-999, nrow(cal_curves))
+
 for(i in 1:nrow(cal_curves)){
   
   
@@ -1324,20 +1381,41 @@ for(i in 1:nrow(cal_curves)){
   
   lm_temp <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm, data = subset)
   
-  #summary(lm_temp)
-  
-  
-  
   slope <- as.numeric(coefficients(lm_temp))
-  
   cal_curves$slope[i] <- slope
   
-  
   r2 <- summary(lm_temp)$r.squared
-  
   cal_curves$r2[i] <- r2
   
+  lm_temp_1 <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm_1, data = subset)
   
+  slope <- as.numeric(coefficients(lm_temp_1))
+  cal_curves$slope_1[i] <- slope
+  
+  r2 <- summary(lm_temp_1)$r.squared
+  cal_curves$r2_1[i] <- r2
+  
+  lm_temp_dalk <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm_dalk, data = subset)
+  
+  slope <- as.numeric(coefficients(lm_temp_dalk))
+  cal_curves$slope_dalk[i] <- slope
+  
+  r2 <- summary(lm_temp_dalk)$r.squared
+  cal_curves$r2_dalk[i] <- r2
+  
+  if(is.na(subset$vol_is_normnorm_man[1])){
+    next
+  }
+  else{
+  
+  lm_temp_man <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm_man, data = subset)
+  
+  slope <- as.numeric(coefficients(lm_temp_man))
+  cal_curves$slope_man[i] <- slope
+  
+  r2 <- summary(lm_temp_man)$r.squared
+  cal_curves$r2_man[i] <- r2
+  }
 }
 
 real_cc <- cal_curves %>% 
@@ -1347,9 +1425,13 @@ hist(real_cc$r2)
 
 real_cc_withRI <- real_cc %>% 
   left_join(cat, by= c("cpnd"= "Name")) %>% 
-  mutate(inverse_slope = 1/slope)
+  mutate(inverse_slope = 1/slope) %>% 
+  mutate(inverse_slope_1 = 1/slope_1) %>% 
+  mutate(inverse_slope_dalk = 1/slope_dalk) %>% 
+  mutate(inverse_slope_man = 1/slope_man)
 
-write.csv(real_cc_withRI, file = "cal_factors3.csv")
+
+write.csv(real_cc_withRI, file = "cal_factors4.csv")
 
 
 
@@ -1358,6 +1440,89 @@ real_cc_withRI %>% ggplot(aes(x = cpnd, y = slope))+
 
 
 ```
+Visualizing the different IS norm methods
+
+```{r}
+for(i in 1:nrow(Analyte_with_IS)){
+  name.temp <- Analyte_with_IS$Compound.Name[i]
+  
+  group.temp <- real_cc_withRI %>% 
+    filter(cpnd == name.temp)
+  
+  group.temp.long <- group.temp %>% 
+    gather(IS_type, inverse_slope_long, inverse_slope:inverse_slope_man, factor_key=TRUE)
+  
+  tt <- group.temp.long %>% ggplot(aes(IS_type, inverse_slope_long, ymin = 0)) +
+    geom_boxplot()+
+    ggtitle(name.temp)
+  
+  print(tt) 
+  
+}
+
+
+
+```
+```{r}
+for(i in 1:nrow(Analyte_with_IS)){
+  name.temp <- Analyte_with_IS$Compound.Name[i]
+  
+  group.temp <- real_cc_withRI %>% 
+    filter(cpnd == name.temp)
+  
+  if(mean(group.temp$r2_man)<0){
+    next
+  }
+  
+  group.temp.long <- group.temp %>% 
+    gather(IS_type, r2_long, c(r2, r2_1, r2_dalk, r2_man), factor_key=TRUE)
+  
+  tt <- group.temp.long %>% ggplot(aes(IS_type, r2_long, ymin = 0)) +
+    geom_boxplot()+
+    ggtitle(name.temp)
+  
+  print(tt) 
+  
+}
+
+
+
+```
+Summarizing the performance of the different methods
+```{r}
+ISnorm_comparison_summary <- real_cc_withRI %>% 
+  group_by(cpnd) %>% 
+  summarise(slope_stdv = sd(inverse_slope), slope_stdv_1 = sd(inverse_slope_1), slope_stdv_dalk = sd(inverse_slope_dalk), slope_stdv_man = sd(inverse_slope_man), mean_r2 = mean(r2), mean_r2_1 = mean(r2_1), mean_r2_dalk = mean(r2_dalk), mean_r2_man = mean(r2_man))
+
+
+man_included_ISnorm_comp <- ISnorm_comparison_summary %>% 
+  filter(mean_r2_man > 0)
+
+man_included_ISnorm_comp %>% 
+  gather(IS_type, slope_sd, slope_stdv:slope_stdv_man, factor_key = TRUE) %>% 
+  ggplot(aes(IS_type, slope_sd))+
+  geom_boxplot()+
+  coord_cartesian(ylim=c(0, 20000))
+
+man_included_ISnorm_comp %>% 
+  gather(IS_type, mean_r2_all, mean_r2:mean_r2_man, factor_key = TRUE) %>% 
+  ggplot(aes(IS_type, mean_r2_all))+
+  geom_boxplot()
+
+summary(man_included_ISnorm_comp$mean_r2)
+
+summary(man_included_ISnorm_comp$mean_r2_man)
+
+summary(man_included_ISnorm_comp$slope_stdv)
+
+summary(man_included_ISnorm_comp$slope_stdv_man)
+
+
+
+```
+
+
+
 
 Looking for functions to fit for the RI or category relationships
 ```{r}
@@ -1556,22 +1721,43 @@ This actually gives me some hope- there appear to be a few outliers which are sk
 ```{r}
 # not working investigate later
 # use 88
+name_with_cat <- cat %>% 
+  dplyr::select(Name, Func_group_cat) %>% 
+  rename(Compound.Name = Name)
+
+comp_pop_1 <- compound_pop %>% 
+  left_join(name_with_cat)
+
+#sampling forcing the pct of the categories to be equal
+set.seed(88)
+tty<-sample.split(comp_pop_1$Func_group_cat, SplitRatio = 8/10)
+
 set.seed(87)
-train.ids = sample(nrow(compound_pop), .8*nrow(compound_pop))
+#train.ids = sample(nrow(compound_pop), .8*nrow(compound_pop))
 slopemod_temp <- compound_pop 
   #%>% dplyr::select(-cpnd)
 
-slopemod.train.names = slopemod_temp[train.ids,]
+slopemod.train.names = slopemod_temp[tty,]
 
 slopemod.train <- slopemod.train.names %>% 
   rename(cpnd = Compound.Name) %>% 
   inner_join(cc_slopemod) 
   
-slopemod.test.names = slopemod_temp[-train.ids,]
+slopemod.test.names = slopemod_temp %>% 
+  anti_join(slopemod.train.names)
 
 slopemod.test <- slopemod.test.names %>% 
   rename(cpnd = Compound.Name) %>% 
   inner_join(cc_slopemod)
+
+table
+
+confirmation_train <- comp_pop_1[tty,]
+confirmation_test <- comp_pop_1 %>% 
+  anti_join(confirmation_train)
+
+table(confirmation_train$Func_group_cat)
+table(confirmation_test$Func_group_cat)
 
 set.seed(99)
 
@@ -1585,18 +1771,36 @@ slopemod.test.o = slopemod.test
 slopemod.train = slopemod.train.o %>% 
   ungroup() %>% 
   select(-cpnd) %>% 
-  select(-r2) %>% 
+  select(-r2) %>%
+  select(-r2_1) %>%
+  select(-r2_dalk) %>%
+  select(-r2_man) %>%
   select(-comp.n) %>% 
   select(-pct_of_samp) %>% 
-  select(-slope)
+  select(-slope) %>% 
+  select(-slope_1) %>%
+  select(-slope_dalk) %>% 
+  select(-slope_man) %>% 
+  mutate(Appropriate_cc = as.factor(dates)) %>% 
+  select(-dates)
+  
 
 slopemod.test = slopemod.test.o %>% 
   ungroup() %>% 
   select(-cpnd) %>% 
-  select(-r2) %>% 
+  select(-r2) %>%
+  select(-r2_1) %>%
+  select(-r2_dalk) %>%
+  select(-r2_man) %>%
   select(-comp.n) %>% 
   select(-pct_of_samp) %>% 
-  select(-slope)
+  select(-slope) %>% 
+  select(-slope_1) %>%
+  select(-slope_dalk) %>% 
+  select(-slope_man) %>% 
+  mutate(Appropriate_cc = as.factor(dates)) %>% 
+  select(-dates)
+  
 
 ```
 
