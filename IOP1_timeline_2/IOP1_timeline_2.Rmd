@@ -97,20 +97,33 @@ In this section, I write a series of functions to import my files based on a tab
 
 ```{r timeline_testing, warning = FALSE, echo = FALSE, message = FALSE}
 #reading in the index of the blob tables
-bt_sum <- read_csv("Blob_table_summary_JustSample.csv")
+bt_sum_iop1 <- read_csv("Blob_table_summary_JustSample.csv") %>% 
+  filter(IOP == 1)
 
-date <- bt_sum$File_num[10]
+date <- bt_sum_iop1$File_num[10]
 
 rundatet <- gsub("GCxGC_","",date)
 
 rundate <- as.Date(rundatet, "%Y%m%d")
 
+bt_sum_iop2 <- read_csv("Blob_table_summary_JustSample.csv") %>% 
+  filter(IOP == 2)
+
+date <- bt_sum_iop2$File_num[10]
+
+rundatet <- paste("2018", date, sep = "")
+
+rundate <- as.Date(rundatet, "%Y%m%d")
+
 #adding a date column that R will recognize
-bt_sum <- bt_sum %>% mutate(r_date = convertToDateTime(Date_num)) %>% 
+bt_sum_iop1 <- bt_sum_iop1 %>% mutate(r_date =   convertToDateTime(Date_num)) %>% 
   mutate(run_date = as.Date(gsub("GCxGC_","",File_num), "%Y%m%d"))
 
-bt_sum_IOP1 <- bt_sum %>% 
-  filter(IOP == 1)
+bt_sum_iop2 <- bt_sum_iop2 %>% mutate(r_date =   convertToDateTime(Date_num)) %>% 
+  mutate(run_date = as.Date(paste("2018", File_num, sep = ""), "%Y%m%d"))
+
+#bt_sum_IOP1 <- bt_sum %>% 
+#  filter(IOP == 1)
 
 # making a function that will make the correct file names from the table of samples so that my actual sample files can be read in
 make_file_name <- function(date_string) {
@@ -121,10 +134,27 @@ make_file_name <- function(date_string) {
   
 }
 
+make_file_name_iop2 <- function(date_string) {
+  file_start <- "IOP2_blobtables/"
+  file_end <- ".csv"
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
 # function to read in files 
 read_bt_files <- function(fi_name_short) {
   
   fi_name <- make_file_name(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+read_bt_files_iop2 <- function(fi_name_short) {
+  
+  fi_name <- make_file_name_iop2(fi_name_short)
   temp_bt <<- read_csv(file = fi_name)
   temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
   temp_bt <<- temp_bt
@@ -145,10 +175,28 @@ make_massive_table <- function(summary_table){
   M_t <<- M
 }
 
-make_massive_table(bt_sum_IOP1)
+make_massive_table_iop2 <- function(summary_table){
+ 
+  M2 <- read_bt_files_iop2(as.character(summary_table$File_num[1]))
+
+  for(i in 2:length(summary_table$File_num)){
+    t <- read_bt_files_iop2(as.character(summary_table$File_num[i]))
+    Mnew <- rbind(M2, t)
+    M2 <- Mnew
+    print(i)
+  }
+  M_t2 <<- M2
+}
+
+make_massive_table(bt_sum_iop1)
+
+make_massive_table_iop2(bt_sum_iop2)
 
 #adding in all information from the summary table
-M_t_full <- M_t %>% left_join(bt_sum)
+M_t_iop1_full <- M_t %>% left_join(bt_sum_iop1)
+M_t_iop2_full <- M_t2 %>% left_join(bt_sum_iop2)
+
+M_t_full <- rbind(M_t_iop1_full, M_t_iop2_full)
 
 # tidying column names
 names(M_t_full) <- make.names(names(M_t_full),unique = TRUE)
@@ -183,7 +231,7 @@ M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>%
 # identifying the internal standard
 IS_goodmatch <- M_t_LRI %>% 
   filter(Library.Name == IS_lib_name | Library.Name == "-") %>% 
-  filter(LRI_diff < LRI_diff_floor) %>% 
+  filter(LRI_diff < LRI_diff_floor| Compound.Name == "4-methoxy-benzaldehyde") %>% 
   filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "methoxyphenol-d3")  
 
 FB_goodmatch <- M_t_LRI %>% 
@@ -304,7 +352,7 @@ compound_pop <- M_t_analyte_unique %>%
 table(compound_pop$comp.n)
 
 hist(compound_pop$pct_of_samp, 
-     main = paste("Histogram of", nrow(compound_pop), "Traced Compounds\nOver Wet Season"),
+     main = paste("Histogram of", nrow(compound_pop), "Traced Compounds\nOver Wet and Dry Seasons"),
      xlab = "Percent Occurence Above Detection Limits",
      col = "grey")
 
@@ -350,7 +398,7 @@ summary(M_t_analyte_summary$perct_volfound)
 # could use a moving window 
 ```
 
-The results of the library evaluation are promising, but reveal room for improvement.  Despite the fact that only 55% of the analyte compounds in each image match the library, the highest volume compounds are well traced- an average of 86% of total instrument response (used as a proxy for recovered mass) is traced in each image, and even the least well described file has 82% coverage.  The goal of 90% coverage has not been achieved, but as a first draft the library has exceeded expectations for achieving broad coverage. 
+The results of the library evaluation are promising, but reveal room for improvement.  Despite the fact that only 55% of the analyte compounds in each image match the library, the highest volume compounds are well traced- an average of 88% of total instrument response (used as a proxy for recovered mass) is traced in each image, and even the least well described file has 82% coverage.  The goal of 90% coverage has not been achieved, but as a first draft the library has exceeded expectations for achieving broad coverage. 
 The histogram reveals that continuous tracking of compounds across the entire time series has not been fully achieved- while ~300 compounds were identified in all of the samples, another ~300 were identified in only 1 or 2 samples.  While samples are inconsistent and it is unsurprising that many compounds are either not present or present below detection limits in certain samples, the high number of compounds occuring in only one or two samples may indicate that there may be duplicate entries in the compound library. Additionally, as the graph *Average Blob Volume by Match Frequency* and the histogram of matched blobs llustrate, there are are a relatively high number of high volume peaks that appear to be present in ~half or fewer of the samples.  While it is possible for a compound to be present in high quantities in some samples and below detection limits in others, the frequency of these samples occuring at around half of the number of samples tested points to the possibility that some high volume blobs are being split between multiple duplicate mass spectral entries in the library. The compounds that occur in only a few samples should be investigated to determine whether they are low abundance compounds which are not present in other samples or whether there are duplicate entries of compounds leading to split assignments.  
 
 ### For Lindsay: graphing unique compounds in various ways
