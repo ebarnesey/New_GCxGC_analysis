@@ -405,8 +405,8 @@ The histogram reveals that continuous tracking of compounds across the entire ti
 
 ```{r}
 
-IOP1_btsum <- bt_sum %>% 
-  filter(IOP == 1) %>% 
+IOP12_btsum <- rbind(bt_sum_iop1, bt_sum_iop2) %>% 
+  filter(IOP != 0) %>% 
   mutate(n_unique_sampleprior = 0) %>% 
   mutate(n_overlap_sampleprior= 0) %>% 
   mutate(cumulative_unique = 0) 
@@ -416,17 +416,17 @@ unique_tracing <- M_t_analyte_unique %>%
 
 unique_tag <- 
   unique_tracing %>% 
-  filter(File_num == IOP1_btsum$File_num[1]) %>% 
+  filter(File_num == IOP12_btsum$File_num[1]) %>% 
   mutate(is_unique_prior = NA) %>% 
   dplyr::select(Compound.Name, File_num, is_unique_prior)
 
 
-for(i in 2:nrow(IOP1_btsum)){
+for(i in 2:nrow(IOP12_btsum)){
   
   
   
-  previous_file_i <- IOP1_btsum$File_num[i-1]
-  file_i <- IOP1_btsum$File_num[i]
+  previous_file_i <- IOP12_btsum$File_num[i-1]
+  file_i <- IOP12_btsum$File_num[i]
   
   prev_compounds <- unique_tracing %>% 
     filter(File_num == previous_file_i) %>% 
@@ -458,6 +458,7 @@ avg_unique = sum(unique_tracing_c$unique_vol)/sum(unique_tracing_c$Volume)
 
 ```{r}
 unique_tracing_c %>% 
+  filter(IOP == 2) %>% 
   mutate(ones = 1) %>% 
   ggplot(aes(fill = unique_log, y = ones, x = r_date))+
   geom_bar(position = "stack", stat = "identity")+
@@ -465,8 +466,20 @@ unique_tracing_c %>%
 
 
 unique_tracing_c %>% 
+  filter(IOP == 2) %>% 
   mutate(ones = 1) %>% 
-  ggplot(aes(fill = unique_log, y = Volume, x = r_date))+
+  ggplot(aes(fill = unique_log, y = Punch_norm_vol, x = r_date))+
+  geom_bar(position = "stack", stat = "identity")+
+  ylab("Analyte Raw Volume")+
+  xlab("Dry Season GoAmazon Date")+
+  scale_fill_manual(name = "Unique Compared\n to Previous Sample", values=c("blue", "green"))+
+  theme(axis.text.x = element_text(size=14), axis.text.y = element_text(size=14), axis.text=element_text(size=12),
+        axis.title=element_text(size=14))
+
+unique_tracing_c %>% 
+  filter(IOP == 1) %>% 
+  mutate(ones = 1) %>% 
+  ggplot(aes(fill = unique_log, y = Punch_norm_vol, x = r_date))+
   geom_bar(position = "stack", stat = "identity")+
   ylab("Analyte Raw Volume")+
   xlab("Wet Season GoAmazon Date")+
@@ -488,7 +501,7 @@ ggplot(data, aes(fill=condition, y=value, x=specie)) +
     
 Examining: are there more compounds not traced at different times?
 ```{r}
-untraced_tracking <- bt_sum_IOP1 %>% 
+untraced_tracking <- IOP12_btsum %>% 
   left_join(M_t_analyte_summary) 
 
 untraced_tracking %>% 
@@ -527,7 +540,7 @@ RI2 <- IS_test1$RI2
 #   dplyr::select("LRI_avg", "RI2")
 IS_positions_12030456 <- read.csv("IOP1_blobtables_2/IS_1203_0456.csv")
 IS_rt2 <- IS_positions_12030456 %>% 
-  select(Compound.Name, Retention.II..sec.)
+  dplyr::select(Compound.Name, Retention.II..sec.)
 
 
 IS_positions_avg <- IS_positions %>% 
@@ -545,7 +558,7 @@ IS_avg_vols <- IS_unique %>%
   left_join(IS_unique) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
-  left_join(bt_sum)
+  left_join(IOP12_btsum)
 
 IS_cat <- read.csv("IS_withcat.csv")
 IS_cat <- IS_cat %>% 
@@ -595,7 +608,7 @@ cor2 <- rcorr(as.matrix(IS_corrprep))
 
 corr_table_IS<- cor2$r
 
-write.csv(corr_table_IS, file = "IOP1_internalstandard_correlation_matrix2.csv")
+write.csv(corr_table_IS, file = "Internalstandard_correlation_matrix2.csv")
 
 ```
 
@@ -606,8 +619,8 @@ write.csv(corr_table_IS, file = "IOP1_internalstandard_correlation_matrix2.csv")
 
 
 ```{r IS_mapping}
-LRI_weight = 1
-LRII_weight = 3
+LRI_weight = 2
+LRII_weight = 1
 
 LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
 LRI2_avg = mean(IS_positions_avg$Retention.II..sec.)
@@ -634,53 +647,164 @@ Analyte_positions <- Analyte_positions %>%
   mutate(relative_LRI2 = RI2/LRI2_avg)
 
 Analyte_pos_short <- Analyte_positions %>% 
-  select(relative_LRI, relative_LRI2)
+  dplyr::select(relative_LRI, relative_LRI2)
 
 IS_pos_short <- IS_positions_avg %>% 
-  select(relative_LRI, relative_LRI2)
+  dplyr::select(relative_LRI, relative_LRI2)
 
 #knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
 
-testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
+#Old method, only using 1 nearest
+#testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
 
-Analyte_IS_Index <- testnn$nn.idx
+# note 1.19 is the min radius at which every compound has at least one nearest
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 1.19)
 
-Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
+Analyte_IS_Index <- data.frame(testnn$nn.idx)
+# old method only using 1 nearest
+# Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
+Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3)
+
+# old method with only 1 IS
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
+
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
+#   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
+#   mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
 
 Analyte_with_IS <- Analyte_pos_ad %>% 
-  mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
+  mutate(IS_appropriate1 = NA) %>% 
+  mutate(IS_appropriate2 = NA) %>% 
+  mutate(IS_appropriate3 = NA)
+
+for(i in 1:nrow(Analyte_with_IS)){
+  t_isind_1 <- Analyte_with_IS$IS_index1[i]
+  t_isind_2 <- Analyte_with_IS$IS_index2[i]
+  t_isind_3 <- Analyte_with_IS$IS_index3[i]
+  
+  if(t_isind_1 > 0){
+  t_isap_1 <- IS_positions_avg$Compound.Name[t_isind_1]
+  }else{
+    t_isap_1 <- NA
+  }
+  
+  if(t_isind_2 > 0){
+  t_isap_2 <- IS_positions_avg$Compound.Name[t_isind_2]
+  }else{
+    t_isap_2 <- NA
+  }
+  
+  if(t_isind_3 > 0){
+  t_isap_3 <- IS_positions_avg$Compound.Name[t_isind_3]
+  }else{
+    t_isap_3 <- NA
+  }
+  
+  
+  
+  Analyte_with_IS$IS_appropriate1[i] <- t_isap_1
+  Analyte_with_IS$IS_appropriate2[i] <- t_isap_2
+  Analyte_with_IS$IS_appropriate3[i] <- t_isap_3
+  print(i)
+}
+
+# Analyte_with_IS_positions <- Analyte_with_IS %>% 
+#   left_join(Analyte_positions) %>% 
+#   left_join(IS_positions_avg, by = c("IS_appropriate"= "Compound.Name"))
 
 Analyte_with_IS_positions <- Analyte_with_IS %>% 
   left_join(Analyte_positions) %>% 
-  left_join(IS_positions_avg, by = c("IS_appropriate"= "Compound.Name"))
+  left_join(IS_positions_avg, by = c("IS_appropriate1"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate2"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name"))
 
 M_t_analyte_withIS <- M_t_analyte_unique %>% 
   left_join(Analyte_with_IS) %>% 
-  mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
-  mutate(IS_mean_norm= -999*(LRI.I/LRI.I)) 
+  mutate(IS_vol1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol_dalk= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm_dalk= -999*(LRI.I/LRI.I))
 
+# old- only 1 IS
+# M_t_analyte_withIS <- M_t_analyte_unique %>% 
+#   left_join(Analyte_with_IS) %>% 
+#   mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
+#   mutate(IS_mean_norm= -999*(LRI.I/LRI.I)) 
+
+
+# for(i in 1:nrow(M_t_analyte_withIS)){
+#   
+#   
+#   IS_name = M_t_analyte_withIS$IS_appropriate[i]
+#   File_num_t = M_t_analyte_withIS$File_num[i]
+#   
+#   IS_indicated <- IS_stability %>% 
+#     filter(Compound.Name == IS_name) %>% 
+#     filter(File_num == File_num_t)
+#   
+#   M_t_analyte_withIS$IS_vol[i] <-IS_indicated$Volume_tot[1]
+#   M_t_analyte_withIS$IS_mean_norm[i] <-IS_indicated$IS_mean_norm[1]
+#   
+#   
+# }
 
 for(i in 1:nrow(M_t_analyte_withIS)){
   
   
-  IS_name = M_t_analyte_withIS$IS_appropriate[i]
+  IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
+  IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
+  IS_name3 = M_t_analyte_withIS$IS_appropriate3[i]
+  
+  
+  
+  
   File_num_t = M_t_analyte_withIS$File_num[i]
   
-  IS_indicated <- IS_stability %>% 
-    filter(Compound.Name == IS_name) %>% 
+  IS_indicated1 <- IS_stability %>% 
+    filter(Compound.Name == IS_name1) %>% 
     filter(File_num == File_num_t)
   
-  M_t_analyte_withIS$IS_vol[i] <-IS_indicated$Volume_tot[1]
-  M_t_analyte_withIS$IS_mean_norm[i] <-IS_indicated$IS_mean_norm[1]
+  M_t_analyte_withIS$IS_vol1[i] <-IS_indicated1$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm1[i] <-IS_indicated1$IS_mean_norm[1]
   
+  IS_indicated2 <- IS_stability %>% 
+    filter(Compound.Name == IS_name2) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol2[i] <-IS_indicated2$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm2[i] <-IS_indicated2$IS_mean_norm[1]
+  
+  IS_indicated3 <- IS_stability %>% 
+    filter(Compound.Name == IS_name3) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol3[i] <-IS_indicated3$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm3[i] <-IS_indicated3$IS_mean_norm[1]
   
 }
 
+# 
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+#   mutate(vol_is_rawnorm = Volume/IS_vol)
+#   
+
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
+  mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
+
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
-  mutate(vol_is_rawnorm = Volume/IS_vol)
-  
-
+  mutate(vol_is_rawnorm = Volume/IS_vol) 
 ```
 
 making distance matrix to concat with correlation matrix
@@ -865,7 +989,7 @@ M_t_analyte_unique_IS <- M_t_analyte_withIS %>%
 lev_check <- M_t_analyte_unique_IS %>% 
   filter(Compound.Name == "1202_1412_blob_1")
 
-M_t_total_vol_date <- bt_sum %>% 
+M_t_total_vol_date <- IOP12_btsum %>% 
   left_join(M_t_all_analytes_volcount)
 
 M_t_total_vol_date_IOP1 <- M_t_total_vol_date %>% 
@@ -992,6 +1116,9 @@ write.csv(only_tracers_LY, file = "Tracers_for_Lindsay.csv")
 ## Cumulative dist using IS normalized vol
 
 ```{r}
+analyte_cumsum <- M_t_analyte_unique_IS %>% 
+  group_by(Compound.Name)
+
 analyte_cumsum <- M_t_analyte_unique_IS %>% 
   group_by(Compound.Name) %>% 
   summarise(sum_rawvol = sum(Punch_norm_vol, na.rm = TRUE), sum_ISrawnormvol = sum(vol_pnorm_israwnorm, na.rm = TRUE), sum_ISnormnormvol = sum(vol_pnorm_is_normnorm, na.rm = TRUE)) %>% 
