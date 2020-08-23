@@ -525,8 +525,19 @@ IS_positions <- IS_goodmatch %>%
   #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
   summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
 
+IS_avg_vols_toadd <- IS_unique %>% 
+  group_by(Compound.Name) %>% 
+  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  left_join(IS_unique) %>% 
+  mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
+  mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
+  dplyr::select(Compound.Name, File_num, IS_mean_norm)
+
 IS_unique_pos <- IS_unique %>% 
-  left_join(IS_positions)
+  left_join(IS_positions) %>% 
+  left_join(IS_avg_vols_toadd)
+
+
 
 IS_test1 <- IS_unique_pos %>% 
   filter(File_num == "GCxGC_20181201_0136")
@@ -804,7 +815,9 @@ M_t_analyte_withIS <- M_t_analyte_withIS %>%
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
-  mutate(vol_is_rawnorm = Volume/IS_vol) 
+  mutate(vol_is_rawnorm = Volume/IS_vol) %>%
+  mutate(vol_is_normnorm_ptnorm = vol_is_normnorm/(Filter_punches*time_sampled_hr)) %>% 
+  mutate(vol_is_rawnorm_ptnorm = vol_is_rawnorm/(Filter_punches*time_sampled_hr))
 ```
 
 making distance matrix to concat with correlation matrix
@@ -886,7 +899,7 @@ library(mgcv)
 IS_unique_pos_f <- IS_unique_pos %>% 
   mutate(F_num_f = as.factor(File_num)) 
 
-y <- IS_unique_pos_f$Volume_tot
+y <- IS_unique_pos_f$IS_mean_norm
 Fac <- IS_unique_pos_f$F_num_f
 x <- IS_unique_pos_f$LRI_avg
 z <- IS_unique_pos_f$RI2
@@ -908,7 +921,7 @@ summary(IS_gam2)
 # testing gam on a single file
 test_gam_1 <- IS_unique_pos_f %>% 
   filter(File_num == "GCxGC_20181201_0136") %>% 
-  rename(Volume_tot_inst = Volume_tot) %>% 
+  rename(IS_mean_norm_inst = IS_mean_norm) %>% 
   mutate(F_num_f = as.factor(F_num_f))
 
 #test_gam_1a <- data.frame(Fac = test_gam_1$F_num_f, x=test_gam_1$LRI_avg, z=test_gam_1$RI2)
@@ -917,27 +930,27 @@ test_gam_1 <- IS_unique_pos_f %>%
 
 # visualizing IS_gam2 and how it would predict internal standard volumes in one fil
 test_gam_1b <- test_gam_1 %>% 
-  mutate(Volume_tot_model = predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
+  mutate(IS_mean_norm_model = predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
 
 test_gam_1b %>% 
-  ggplot(aes(x = LRI_avg, y = RI2, color = Volume_tot_inst)) +
+  ggplot(aes(x = LRI_avg, y = RI2, color = IS_mean_norm_inst)) +
   geom_point()
 
 test_gam_1b %>% 
-  ggplot(aes(x = LRI_avg, y = RI2, color = Volume_tot_model)) +
+  ggplot(aes(x = LRI_avg, y = RI2, color = IS_mean_norm_model)) +
   geom_point()
 
 test_gam_all_b <- IS_unique_pos_f %>% 
-  mutate(Volume_total_model =  predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
+  mutate(IS_mean_norm_model =  predict.gam(IS_gam2, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))
 
 ### note that the output of the following plot indicates that the IS_gam2 is not appropriate for my data; it is impossible for signal to be less than zero, meaning that the low concentration compounds are not being modeled well. a solution for this is to try a log transformation to improve modeling of low concentration internal standards
 test_gam_all_b %>% 
-  ggplot(aes(x = Volume_tot, y = Volume_total_model, color = Compound.Name))+
+  ggplot(aes(x = IS_mean_norm, y = Volume_total_model, color = Compound.Name))+
   geom_point()
 
 #### gam with a log transform of volumes
 #y <- log(IS_unique_pos_f$Volume_tot)
-y <- IS_unique_pos_f$Volume_tot
+y <- IS_unique_pos_f$IS_mean_norm
 Fac <- IS_unique_pos_f$F_num_f
 x <- IS_unique_pos_f$LRI_avg
 z <- IS_unique_pos_f$RI2
@@ -952,10 +965,10 @@ plot(IS_gam2b) # first graph illustrating how recovery varies with volatility, s
 vis.gam(IS_gam2b, view = c("x", "z"), theta = -45, phi = 45, type = "response")
 
 test_gam_all <- IS_unique_pos_f %>% 
-  mutate(Vol_inst_log = log(Volume_tot)) %>% 
+  mutate(IS_mean_norm_inst_log = log(IS_mean_norm)) %>% 
   #mutate(Volume_total_model_log =  (predict.gam(IS_gam2b, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2)))) %>% 
   #mutate(Volume_total_model = exp(Volume_total_model_log))
-  mutate(Volume_total_IS_model = (predict.gam(IS_gam2b, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2), type = "response")))
+  mutate(IS_mean_norm_IS_model = (predict.gam(IS_gam2b, data.frame(Fac = as.factor(F_num_f), x = LRI_avg, z = RI2), type = "response")))
   
 #test_gam_all %>% 
 #  ggplot(aes(x = Vol_inst_log, y = Volume_total_model_log, color = Compound.Name))+
@@ -984,7 +997,8 @@ Each sample was doped with the same quantity of internal standard at the same co
 ## add a column to the master list of unique analytes which is the internal standard normalized volume at each point in time
 M_t_analyte_unique_IS <- M_t_analyte_withIS %>% 
   mutate(IS_glm =  exp(predict.gam(IS_gam2b, data.frame(Fac = as.factor(File_num), x = LRI.I, z = Retention.II..sec.)))) %>% 
-  mutate(Vol_norm_GLM = Volume/IS_glm)
+  mutate(Vol_norm_GLM = Volume/IS_glm) %>% 
+  mutate(vol_norm_GLM_ptnorm = Vol_norm_GLM/(Filter_punches * time_sampled_hr))
 
 lev_check <- M_t_analyte_unique_IS %>% 
   filter(Compound.Name == "1202_1412_blob_1")
@@ -1040,11 +1054,10 @@ This graph highlights one of the purposes of the internal standard- correcting f
 
 ```{r}
 # normalized by the normalized internal standard
-for_Corr_is_normnorm <- M_t_analyte_unique_IS %>% 
-  mutate(vol_is_normnorm = vol_is_normnorm/Filter_punches) %>% 
+for_Corr_is_normnorm <- M_t_analyte_unique_IS  %>% 
   dplyr::select(Compound.Name, vol_is_normnorm, File_num) %>% 
   spread(key = Compound.Name, value = vol_is_normnorm) %>% 
-  select(-File_num)
+  dplyr::select(-File_num)
 
 cor_IS_normnorm <- rcorr(as.matrix(for_Corr_is_normnorm))
 
@@ -1054,10 +1067,9 @@ write.csv(corr_table_IS_normnorm, file = "IOP1_correlation_matrix_ISnormnorm.csv
 
 # normalized by GLM
 for_Corr_glm_normnorm <- M_t_analyte_unique_IS %>% 
-   mutate(Vol_norm_GLM = Vol_norm_GLM/Filter_punches) %>% 
   dplyr::select(Compound.Name, Vol_norm_GLM, File_num) %>% 
   spread(key = Compound.Name, value = Vol_norm_GLM) %>% 
-  select(-File_num)
+  dplyr::select(-File_num)
 
 cor_glm_norm <- rcorr(as.matrix(for_Corr_glm_normnorm))
 
@@ -1067,10 +1079,9 @@ write.csv(corr_table_glm_norm, file = "IOP1_correlation_matrix_GLMnorm.csv")
 
 # directly normalized by IS
 for_Corr_IS_norm <- M_t_analyte_unique_IS %>% 
-   mutate(vol_is_rawnorm = vol_is_rawnorm/Filter_punches) %>% 
   dplyr::select(Compound.Name, vol_is_rawnorm, File_num) %>% 
   spread(key = Compound.Name, value = vol_is_rawnorm) %>% 
-  select(-File_num)
+  dplyr::select(-File_num)
 
 cor_is_norm <- rcorr(as.matrix(for_Corr_IS_norm))
 
@@ -1121,15 +1132,17 @@ analyte_cumsum <- M_t_analyte_unique_IS %>%
 
 analyte_cumsum <- M_t_analyte_unique_IS %>% 
   group_by(Compound.Name) %>% 
-  summarise(sum_rawvol = sum(Punch_norm_vol, na.rm = TRUE), sum_ISrawnormvol = sum(vol_pnorm_israwnorm, na.rm = TRUE), sum_ISnormnormvol = sum(vol_pnorm_is_normnorm, na.rm = TRUE)) %>% 
+  summarise(sum_rawvol = sum(Volume, na.rm = TRUE), sum_ISrawnormvol = sum(vol_is_rawnorm, na.rm = TRUE), sum_ISnormnormvol = sum(vol_is_normnorm, na.rm = TRUE)) %>% 
   arrange(desc(sum_rawvol)) %>% 
   tibble::rowid_to_column("Rownum") %>% 
   dplyr::select(Compound.Name, Rownum, sum_rawvol, sum_ISrawnormvol, sum_ISnormnormvol) %>% 
   mutate(cumsum_raw = sum_rawvol/sum(sum_rawvol), cumsum_ISrawnorm = sum_ISrawnormvol/sum(sum_ISrawnormvol), num_pct = Rownum/nrow(analyte_cumsum), cumsum_ISnormnorm = sum_ISnormnormvol/sum(sum_ISnormnormvol)) %>% 
-  mutate(raw_cumsum= cumsum_raw)
+  mutate(raw_cumsum= cumsum_raw, ISnormnorm_cumsum = cumsum_raw)
 
 for(i in 2:nrow(analyte_cumsum)){
   analyte_cumsum$raw_cumsum[i]= analyte_cumsum$raw_cumsum[i]+analyte_cumsum$raw_cumsum[i-1]
+  analyte_cumsum$ISnormnorm_cumsum[i]=
+    analyte_cumsum$ISnormnorm_cumsum[i]+analyte_cumsum$ISnormnorm_cumsum[i-1]
   
 }
   
@@ -1140,7 +1153,7 @@ analyte_cumsum %>%
   geom_point()
 
 analyte_cumsum %>% 
-  ggplot(aes(x = Rownum, y = raw_cumsum))+
+  ggplot(aes(x = Rownum, y = ISnormnorm_cumsum))+
   geom_point()+
   xlab("Number of Compounds")+
   ylab("Percent of Tracked Analyte Volume")
@@ -1559,5 +1572,123 @@ Strong_diurnal %>%
 #   geom_line(data = num_analyte_unique_vols, aes(x = r_date, y = unique.analyte*1000))
 
 ```
+
+
+Individual Timelines of important compounds
+
+```{r}
+for(i in 1:100){
+  
+  
+  CompoundNamet <- analyte_cumsum$Compound.Name[i]
+  
+  timeseries_singlecomp <- M_t_analyte_unique_IS %>% 
+    filter(Compound.Name == CompoundNamet)
+  
+  name_t <- timeseries_singlecomp$Compound.Name[1]
+  
+  tt_iop1 <- timeseries_singlecomp %>% 
+    filter(IOP == 1) %>% 
+    ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, color = T_O_D))+
+    geom_point()+
+    ggtitle(name_t)
+  
+  tt_iop2 <- timeseries_singlecomp %>% 
+    filter(IOP == 2) %>% 
+    ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, color = T_O_D))+
+    geom_point()+
+    ggtitle(name_t)
+  
+  print(tt_iop1)
+  
+  print(tt_iop2)
+  
+  
+  
+}
+
+
+```
+
+Looking at AMS PMF factors
+
+```{r}
+#install.packages("flux")
+library(flux)
+PMF_IOP1 <- read_csv("IOP1_AMS_try2.csv")
+
+
+PMF_IOP2 <- read_csv("IOP2_AMSPMF.csv")
+
+IOP2_filtertimes <- bt_sum_iop2 %>% 
+  dplyr::select(File_num, AMZ_date, Date_num, r_date) %>% 
+  mutate(AMS_PMF_1 = -999, AMS_PMF_2 = -999, AMS_PMF_3 = -999, AMS_PMF_4 = -999, AMS_PMF_5 = -999, AMS_PMF_6 = -999,)
+
+for(i in 1:nrow(IOP2_filtertimes)){
+  
+  t_start = IOP2_filtertimes$Date_num[i]
+  # note: the .16 is because of the sample times, must customize to own sample period or have both start and stop times in data
+  t_end = t_start + .16
+  
+  temp_PMF_iop2 <- PMF_IOP2 %>% 
+    filter(time_start_num >= t_start) %>% 
+    filter(time_start_num < t_end)
+  
+  IOP2_filtertimes$AMS_PMF_1[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_1))/(t_end-t_start)
+  
+  IOP2_filtertimes$AMS_PMF_2[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_2))/(t_end-t_start)
+  
+  IOP2_filtertimes$AMS_PMF_3[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_3))/(t_end-t_start)
+  
+  IOP2_filtertimes$AMS_PMF_4[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_4))/(t_end-t_start)
+  
+  IOP2_filtertimes$AMS_PMF_5[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_5))/(t_end-t_start)
+  
+  IOP2_filtertimes$AMS_PMF_6[i] <- (auc(x = temp_PMF_iop2$time_start_num, y = temp_PMF_iop2$PMF_factor_6))/(t_end-t_start)
+  
+  
+}
+
+
+IOP1_filtertimes <- bt_sum_iop1 %>% 
+  dplyr::select(File_num, AMZ_date, Date_num, r_date) %>% 
+  mutate(AMS_PMF_1 = NaN, AMS_PMF_2 = NaN, AMS_PMF_3 = NaN, AMS_PMF_4 = NaN, AMS_PMF_5 = NaN, AMS_PMF_6 = NaN)
+
+for(i in 1:nrow(IOP1_filtertimes)){
+  
+  
+  t_start = IOP1_filtertimes$Date_num[i]
+  # note: the .16 is because of the sample times, must customize to own sample period or have both start and stop times in data
+  t_end = t_start + .5
+  
+  temp_PMF_iop1 <- PMF_IOP1 %>% 
+    filter(time_start_num >= t_start) %>% 
+    filter(time_start_num < t_end)
+  
+  if(nrow(temp_PMF_iop1)== 0){
+    next
+  }
+  
+  IOP1_filtertimes$AMS_PMF_1[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_1))/(t_end-t_start)
+  
+  IOP1_filtertimes$AMS_PMF_2[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_2))/(t_end-t_start)
+  
+  IOP1_filtertimes$AMS_PMF_3[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_3))/(t_end-t_start)
+  
+  IOP1_filtertimes$AMS_PMF_4[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_4))/(t_end-t_start)
+  
+  IOP1_filtertimes$AMS_PMF_5[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_5))/(t_end-t_start)
+  
+  IOP1_filtertimes$AMS_PMF_6[i] <- (auc(x = temp_PMF_iop1$time_start_num, y = temp_PMF_iop1$PMF_factor_6))/(t_end-t_start)
+  
+  
+}
+
+
+
+```
+
+
+
 
 Idea for IS normalization: normalize by IS[i, j]/mean(IS[i])
