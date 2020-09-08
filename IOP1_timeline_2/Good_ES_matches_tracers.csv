@@ -1,0 +1,68 @@
+Compound.Name,Compound.Name_ES,Library.Match.Factor_ES,Tracer_category,Tracer_key
+1128_1901_blob_639,monopalmitin,873,,
+1128_1901_blob_678,C26,889,,
+1128_1901_blob_825,C28,826,,
+1128_1901_blob_843,C24,809,,
+1128_1901_blob_854,C23,828,,
+1128_1901_blob_1285,C32,783,,
+1128_1901_fb_add_blob_1,C16 Acid,951,,
+1128_1901_fb_add_blob_7,C18 Acid,944,,
+1128_1901_fb_add_blob_43,FAME16 (Methyl Palmitate),952,,
+1128_1901_fb_add_blob_46,C17 acid,931,,
+1128_1901_fb_add_blob_586,C24 acid,939,,
+1128_1901_fb_add_blob_591,"hexadecanol, TMS",920,,
+1128_1901_fb_add_blob_607,octadecanol,899,,
+1128_1901_fb_add_blob_619,DEET,925,,
+1128_1901_fb_add_blob_633,C22 acid,879,,
+1128_1901_fb_add_blob_642,pinic acid 1,889,MT,MT1
+1128_1901_fb_add_blob_704,pinonic acid,894,MT,MT2
+1128_1901_fb_add_blob_787,triacetin,919,,
+1128_1901_fb_add_blob_924,C10 carboxylic acid,862,,
+1128_1901_fb_add_blob_1175,C9 acid,850,,
+1128_2052_blob_639,beta-caryophyllene aldehyde,903,SQT,SQT4
+1129_1334_blob_660,vanillic acid,856,,
+1129_1334_blob_662,galactosan,902,BB,BB3
+1129_1334_blob_820,vanillin,894,BB,BB4
+1129_1334_blob_1054,"2-Ketoglutaric acid, tri-TMS",837,,
+1129_1334_blob_1095,"beta-nocaryophyllinic acid, TMS",766,SQT,SQT3
+1129_1334_blob_1125,erythreitol,833,,
+1129_1334_blob_1218,C35,821,,
+1202_0046_blob_817,syringaldehyde,748,,
+1202_0046_blob_951,C27,846,,
+1202_0046_blob_1263,a-Amyrin,839,,
+1202_0046_blob_1575,C28,716,,
+1202_1412_blob_1,levoglucosan,940,BB,BB1
+1202_1412_blob_642,C13 acid,721,,
+1202_1412_blob_766,beta-nocaryophyllone aldehyde,898,SQT,SQT2
+1205_0335_blob_706,syringaldehyde,830,BB,BB2
+1205_0335_blob_856,FAME16 (Methyl Palmitate),743,,
+1205_0335_blob_967,a-Amyrin,830,,
+1205_0335_blob_997,lupeol,791,,
+1206_0924_blob_56,4-nitrocatechol,947,,
+1206_0924_blob_75,sinapinaldehyde,925,,
+1206_0924_blob_87,beta-sitosterol,897,,
+1213_2145_blob_732,C26 acid,875,,
+1213_2145_blob_863,C28 acid,847,,
+1213_2145_blob_1254,gamma dodecalactone,743,,
+1216_0703_blob_780,levoglucosan,722,,
+1216_0703_blob_1131,monopalmitin,712,,
+1221_0832_blob_5,MBTCA,922,MT,MT3
+1221_0832_blob_100,phthalic acid,908,,
+1221_0832_blob_656,C25,792,,
+1221_0832_blob_662,C29,813,,
+1221_0832_blob_713,mannosan,704,,
+1221_0832_blob_734,C29,723,,
+1221_0832_blob_745,C30,794,,
+1221_0832_blob_758,gamma dodecalactone,850,,
+1221_0832_blob_785,C31,822,,
+1221_0832_blob_842,FAME18 (Methyl Stearate),757,,
+1221_0832_blob_914,C33,719,,
+1221_0832_blob_953,"beta-nocaryophyllonic acid, TMS",761,SQT,
+1221_0832_blob_967,4-hydroxybenzoic acid,746,BB,BB5
+1221_2326_blob_600,squalene,865,,
+1221_2326_blob_657,beta-caryophyllene aldehyde,851,SQT,SQT1
+1221_2326_blob_790,C26 acid,780,,
+1221_2326_blob_817,C28,761,,
+1221_0832_blob_48,,,ISOP,ISOP1
+1202_1412_blob_573,,,ISOP,ISOP2
+1128_1901_blob_703,,,ISOP,ISOP3

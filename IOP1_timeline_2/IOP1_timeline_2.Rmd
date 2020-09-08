@@ -97,7 +97,7 @@ In this section, I write a series of functions to import my files based on a tab
 
 ```{r timeline_testing, warning = FALSE, echo = FALSE, message = FALSE}
 #reading in the index of the blob tables
-bt_sum_iop1 <- read_csv("Blob_table_summary_JustSample.csv") %>% 
+bt_sum_iop1 <- read_csv("Blob_table_summary_JustSample_datefixed.csv") %>% 
   filter(IOP == 1)
 
 date <- bt_sum_iop1$File_num[10]
@@ -106,7 +106,7 @@ rundatet <- gsub("GCxGC_","",date)
 
 rundate <- as.Date(rundatet, "%Y%m%d")
 
-bt_sum_iop2 <- read_csv("Blob_table_summary_JustSample.csv") %>% 
+bt_sum_iop2 <- read_csv("Blob_table_summary_JustSample_datefixed.csv") %>% 
   filter(IOP == 2)
 
 date <- bt_sum_iop2$File_num[10]
@@ -220,7 +220,7 @@ LRI_diff_floor <- 6
 fb_match_factor_floor <- 600
 fb_reverse_match_factor_floor <- 100
 IS_lib_name <- "amzi0503_b"
-FB_lib_name <- "amz_fb_trimmed"
+FB_lib_name <- "amz_fb_trimmed_esrem"
 
 rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
 
@@ -268,11 +268,11 @@ M_t_analyte_unique <- M_t_all_analytes %>%
   filter(Library.Name != FB_lib_name) %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
   filter(Library.Match.Factor > Match_factor_floor | Description == "match") %>% 
-  filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
+  #filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
   arrange(desc(Volume)) %>% 
   arrange(Compound.Name) %>% 
-  arrange(File_num) %>% 
-  distinct(Compound.Name, File_num, .keep_all = TRUE)
+  arrange(r_date) %>% 
+  distinct(Compound.Name, r_date, .keep_all = TRUE)
 
 ```
 ### **Analysis Task 3: Evaluating Library Performance**
@@ -720,7 +720,7 @@ for(i in 1:nrow(Analyte_with_IS)){
   Analyte_with_IS$IS_appropriate1[i] <- t_isap_1
   Analyte_with_IS$IS_appropriate2[i] <- t_isap_2
   Analyte_with_IS$IS_appropriate3[i] <- t_isap_3
-  print(i)
+  
 }
 
 # Analyte_with_IS_positions <- Analyte_with_IS %>% 
@@ -769,7 +769,7 @@ M_t_analyte_withIS <- M_t_analyte_unique %>%
 
 for(i in 1:nrow(M_t_analyte_withIS)){
   
-  print(i)
+  
   
   IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
   IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
@@ -824,7 +824,7 @@ M_t_analyte_withIS <- M_t_analyte_withIS %>%
 making distance matrix to concat with correlation matrix
 
 ```{r IS_dist}
-IS_dist_mat <- read_csv("IS_positions_avg_rel_dist.csv")
+IS_dist_mat <- read_csv("IS_positions_avg_rel_dist_2.csv")
 
 names(IS_dist_mat) <- make.names(names(IS_dist_mat),unique = TRUE)
 
@@ -848,7 +848,7 @@ for(i in 1:27){
   
 }
 
-corr_dist_comp_c <- read_csv("IOP1_internalstandard_correlation_matrix2.csv")
+corr_dist_comp_c <- read_csv("Internalstandard_correlation_matrix2.n.csv")
 names(corr_dist_comp_c) <- make.names(names(corr_dist_comp_c),unique = TRUE)
 
 IS_dist_mat_trimmed <- IS_dist_mat %>% 
@@ -1060,11 +1060,45 @@ for_Corr_is_normnorm <- M_t_analyte_unique_IS  %>%
   spread(key = Compound.Name, value = vol_is_normnorm) %>% 
   dplyr::select(-File_num)
 
+for_Cov_is_normnorm_IOP1 <- M_t_analyte_unique_IS  %>% 
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, vol_is_normnorm_ptnorm, File_num) %>% 
+  spread(key = Compound.Name, value = vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-File_num)
+
+cov_ISnormnorm_ptnorm_iop1 <- cor(as.matrix(for_Cov_is_normnorm_IOP1), use = "pairwise.complete.obs")
+
+write.csv(cov_ISnormnorm_ptnorm_iop1, file = "IOP1_cov_matrix.csv")
+
+cov_ISnormnorm_ptnorm_iop1.named <- as.data.frame(cov_ISnormnorm_ptnorm_iop1) %>% 
+  rownames_to_column(var = "Compound.Name")
+
+write.csv(cov_ISnormnorm_ptnorm_iop1.named, file = "IOP1_cov_matrix.named.csv")
+
+
+for_Cov_is_normnorm_IOP2 <- M_t_analyte_unique_IS  %>% 
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, vol_is_normnorm_ptnorm, File_num) %>% 
+  spread(key = Compound.Name, value = vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-File_num)
+
+cov_ISnormnorm_ptnorm_iop2 <- cor(as.matrix(for_Cov_is_normnorm_IOP2), use = "pairwise.complete.obs")
+
+write.csv(cov_ISnormnorm_ptnorm_iop2, file = "IOP2_cov_matrix.csv")
+
+cov_ISnormnorm_ptnorm_iop2.named <- as.data.frame(cov_ISnormnorm_ptnorm_iop2) %>% 
+  rownames_to_column(var = "Compound.Name")
+
+write.csv(cov_ISnormnorm_ptnorm_iop2.named, file = "IOP2_cov_matrix.named.csv")
+
+
 cor_IS_normnorm <- rcorr(as.matrix(for_Corr_is_normnorm))
+
+
 
 corr_table_IS_normnorm<- cor_IS_normnorm$r
 
-write.csv(corr_table_IS_normnorm, file = "IOP1_correlation_matrix_ISnormnorm.csv")
+write.csv(corr_table_IS_normnorm, file = "IOP12_correlation_matrix_ISnormnorm.csv")
 
 # normalized by GLM
 for_Corr_glm_normnorm <- M_t_analyte_unique_IS %>% 
@@ -1121,6 +1155,50 @@ only_tracers_LY %>%
 
 write.csv(only_tracers_LY, file = "Tracers_for_Lindsay.csv")
 
+comp_info_chem <- read_csv("Compiled_Compoundinfo_Blobtable.csv")
+names(comp_info_chem) <- make.names(names(comp_info_chem),unique = TRUE)
+
+
+M_t_analyte_unique_IS_comp_info <- M_t_analyte_unique_IS %>% 
+  left_join(comp_info_chem)
+
+good_ESmatches <- comp_info_chem %>% 
+  filter(Library.Match.Factor_ES > 700) %>% 
+  dplyr::select(Compound.Name, Compound.Name_ES, Library.Match.Factor_ES)
+
+write.csv(good_ESmatches, "Good_ES_matches.csv")
+
+mt_ox_goodmatches <- comp_info_chem %>% 
+  filter(Library.Match.Factor_chamber > 800) %>% 
+  filter((startsWith(Compound.Name_chamber, "apin_ox_L"))| (startsWith(Compound.Name_chamber, "limonox_L"))| (startsWith(Compound.Name_chamber, "myrc_ox_L"))) 
+
+# nite for now leaving out mt ox goodmatches
+mt_ox_tracers <- mt_ox_goodmatches%>% 
+  mutate(Tracer_category = "MT") %>% 
+  dplyr::select(Compound.Name, Tracer_category)
+
+es_tracers <- read_csv("Good_ES_matches_tracers.csv") %>% 
+  dplyr::select(Compound.Name, Tracer_category, Tracer_key)
+
+# tracers_all <- rbind(es_tracers, mt_ox_tracers) %>% 
+#   filter(!is.na(Tracer_category)) %>% 
+#   distinct()
+
+tracers_all <- es_tracers %>%
+  filter(!is.na(Tracer_category)) %>%
+  distinct()
+
+
+```
+
+filtering out the top couple of fb compounds
+```{r}
+
+M_t_analyte_unique_IS <- M_t_analyte_unique_IS %>% 
+  filter(Compound.Name != "1128_1901_fb_add_blob_1") %>% 
+  filter(Compound.Name != "1128_1901_fb_add_blob_7")
+  
+  
 
 ```
 
@@ -1255,6 +1333,480 @@ piecht %>% ggplot(aes(x = "", y = value, fill = group))+
 
 .18+.231-.024-.015-.0066
 ```
+Inspecting time series of selected tracers
+```{r}
+#biomass_burning_tracers
+
+bb_tracers <- bb_tracers %>% 
+  mutate(is_tracer =1)
+
+timeseries_bbtracers_iop1 <- M_t_analyte_unique_IS %>% 
+  left_join(bb_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+bb_mean_iop1 <- timeseries_bbtracers_iop1 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_bbtracers_iop1 <- timeseries_bbtracers_iop1 %>% 
+  left_join(bb_mean_iop1)
+
+timeseries_bbtracers_iop2 <- M_t_analyte_unique_IS %>% 
+  left_join(bb_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+bb_mean_iop2 <- timeseries_bbtracers_iop2 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_bbtracers_iop2 <- timeseries_bbtracers_iop2 %>% 
+  left_join(bb_mean_iop2)
+  
+timeseries_bbtracers_iop1 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_bbtracers_iop1 <- timeseries_bbtracers_iop1 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+bbtracer_corr_iop1 <- as.data.frame(cor(for_corr_bbtracers_iop1, method = "pearson", use = "complete.obs"))
+
+
+timeseries_bbtracers_iop2 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_bbtracers_iop2 <- timeseries_bbtracers_iop2 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+bbtracer_corr_iop2 <- as.data.frame(cor(for_corr_bbtracers_iop2, method = "pearson", use = "complete.obs"))
+
+
+```
+
+inspecting isoprene tracers
+
+```{r}
+
+isop_tracers <- isop_tracers %>% 
+  mutate(is_tracer =1)
+
+timeseries_isoptracers_iop1 <- M_t_analyte_unique_IS %>% 
+  left_join(isop_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+isop_mean_iop1 <- timeseries_isoptracers_iop1 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_isoptracers_iop1 <- timeseries_isoptracers_iop1 %>% 
+  left_join(isop_mean_iop1)
+
+timeseries_isoptracers_iop2 <- M_t_analyte_unique_IS %>% 
+  left_join(isop_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+isop_mean_iop2 <- timeseries_isoptracers_iop2 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_isoptracers_iop2 <- timeseries_isoptracers_iop2 %>% 
+  left_join(isop_mean_iop2)
+  
+timeseries_isoptracers_iop1 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_isoptracers_iop1 <- timeseries_isoptracers_iop1 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+isoptracer_corr_iop1 <- as.data.frame(cor(for_corr_isoptracers_iop1, method = "pearson", use = "complete.obs"))
+
+
+timeseries_isoptracers_iop2 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_isoptracers_iop2 <- timeseries_isoptracers_iop2 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+# note: IOP2 isoprene tracers dont correlate with each other
+isoptracer_corr_iop2 <- as.data.frame(cor(for_corr_isoptracers_iop2, method = "pearson", use = "complete.obs"))
+
+
+```
+Inspecting sq tracers
+
+```{r}
+sq_tracers <- sq_tracers %>% 
+  mutate(is_tracer =1)
+
+timeseries_sqtracers_iop1 <- M_t_analyte_unique_IS %>% 
+  left_join(sq_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+sq_mean_iop1 <- timeseries_sqtracers_iop1 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_sqtracers_iop1 <- timeseries_sqtracers_iop1 %>% 
+  left_join(sq_mean_iop1)
+
+timeseries_sqtracers_iop2 <- M_t_analyte_unique_IS %>% 
+  left_join(sq_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+sq_mean_iop2 <- timeseries_sqtracers_iop2 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_sqtracers_iop2 <- timeseries_sqtracers_iop2 %>% 
+  left_join(sq_mean_iop2)
+  
+timeseries_sqtracers_iop1 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_sqtracers_iop1 <- timeseries_sqtracers_iop1 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+sqtracer_corr_iop1 <- as.data.frame(cor(for_corr_sqtracers_iop1, method = "pearson", use = "pairwise.complete.obs"))
+
+
+timeseries_sqtracers_iop2 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_sqtracers_iop2 <- timeseries_sqtracers_iop2 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+# note IOP2 sesquiterpenes dont track nicely with each other
+
+sqtracer_corr_iop2 <- as.data.frame(cor(for_corr_sqtracers_iop2, method = "pearson", use = "pairwise.complete.obs"))
+
+
+```
+
+Now monoterpenes
+
+```{r}
+
+mt_tracers <- mt_tracers %>% 
+  mutate(is_tracer =1)
+
+timeseries_mttracers_iop1 <- M_t_analyte_unique_IS %>% 
+  left_join(mt_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+mt_mean_iop1 <- timeseries_mttracers_iop1 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_mttracers_iop1 <- timeseries_mttracers_iop1 %>% 
+  left_join(mt_mean_iop1)
+
+timeseries_mttracers_iop2 <- M_t_analyte_unique_IS %>% 
+  left_join(mt_tracers) %>% 
+  filter(is_tracer == 1) %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, T_O_D, vol_is_normnorm_ptnorm)
+
+mt_mean_iop2 <- timeseries_mttracers_iop2 %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_normvol = mean(vol_is_normnorm_ptnorm))
+
+timeseries_mttracers_iop2 <- timeseries_mttracers_iop2 %>% 
+  left_join(mt_mean_iop2)
+  
+timeseries_mttracers_iop1 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_mttracers_iop1 <- timeseries_mttracers_iop1 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+mttracer_corr_iop1 <- as.data.frame(cor(for_corr_mttracers_iop1, method = "pearson", use = "pairwise.complete.obs"))
+
+
+timeseries_mttracers_iop2 %>%  ggplot(aes(x = r_date, y = (vol_is_normnorm_ptnorm/mean_normvol), color = Compound.Name))+
+  geom_line()
+
+for_corr_mttracers_iop2 <- timeseries_mttracers_iop2 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+# note IOP2 sesquiterpenes dont track nicely with each other
+
+mttracer_corr_iop2 <- as.data.frame(cor(for_corr_mttracers_iop2, method = "pearson", use = "pairwise.complete.obs"))
+
+```
+IOP1 venn diagram
+
+```{r}
+
+cov_floor = .7
+
+cov_iop1_ven <- cov_ISnormnorm_ptnorm_iop1.named %>% 
+  left_join(analyte_cumsum)
+
+names(cov_iop1_ven) <- make.names(names(cov_iop1_ven), unique = TRUE)
+
+tracer_id <- es_tracers %>% 
+  filter(!is.na(Tracer_key))
+
+t_keys <- data.frame(matrix(ncol = nrow(tracer_id), nrow = nrow(cov_iop1_ven)))
+x <- tracer_id$Tracer_key
+colnames(t_keys) <- x
+
+for(j in 1:nrow(tracer_id)){
+
+  cname <- paste("X",tracer_id$Compound.Name[j], sep = "")
+  print(j)
+  for(i in 1:nrow(cov_iop1_ven)){
+    if(is.null(cov_iop1_ven[i, cname])){
+      t_keys[i,j] = NA
+    }
+    else if(is.na(cov_iop1_ven[i, cname])) {
+      t_keys[i,j] = FALSE
+    }else if (cov_iop1_ven[i, cname]> cov_floor){
+      t_keys[i,j] = cov_iop1_ven$cumsum_ISrawnorm[i]
+    }
+    else{
+      t_keys[i,j] = FALSE
+    }
+  }
+}
+
+cov_iop1_vent <- cbind(cov_iop1_ven, t_keys)
+
+cov_iop1_venonly <- cov_iop1_vent[,x]
+
+cov_iop1_ven_named <- cov_iop1_vent[,c("Compound.Name",x)]
+
+cov_iop1_venonly <- cov_iop1_venonly[,order(colnames(cov_iop1_venonly))]
+
+#install.packages("ggVennDiagram")
+
+library(ggVennDiagram)
+
+ggVennDiagram(cov_iop1_venonly[,6:8])
+
+ggVennDiagram(cov_iop1_venonly[,1:4])
+
+ggVennDiagram(cov_iop1_venonly[,9:11])
+
+ggVennDiagram(cov_iop1_venonly[,12:15])
+
+com_list <- c(8,1,9,13)
+
+ggVennDiagram(cov_iop1_venonly[,com_list])
+
+com_list_bbmt <- c(1,4,9,11)
+
+ggVennDiagram(cov_iop1_venonly[,com_list_bbmt])
+
+
+```
+IOP2 Venn Diagram
+
+```{r}
+cov_iop2_ven <- cov_ISnormnorm_ptnorm_iop2.named %>% 
+  left_join(analyte_cumsum)
+
+names(cov_iop2_ven) <- make.names(names(cov_iop2_ven), unique = TRUE)
+
+tracer_id <- es_tracers %>% 
+  filter(!is.na(Tracer_key))
+
+t_keys <- data.frame(matrix(ncol = nrow(tracer_id), nrow = nrow(cov_iop2_ven)))
+x <- tracer_id$Tracer_key
+colnames(t_keys) <- x
+
+for(j in 1:nrow(tracer_id)){
+
+  cname <- paste("X",tracer_id$Compound.Name[j], sep = "")
+  print(j)
+  for(i in 1:nrow(cov_iop2_ven)){
+    if(is.null(cov_iop2_ven[i, cname])){
+      t_keys[i,j] = NA
+    }
+    else if(is.na(cov_iop2_ven[i, cname])) {
+      t_keys[i,j] = FALSE
+    }else if (cov_iop2_ven[i, cname]> cov_floor){
+      t_keys[i,j] = cov_iop2_ven$cumsum_ISrawnorm[i]
+    }
+    else{
+      t_keys[i,j] = FALSE
+    }
+  }
+}
+
+cov_iop2_vent <- cbind(cov_iop2_ven, t_keys)
+
+cov_iop2_venonly <- cov_iop2_vent[,x]
+
+cov_iop2_ven_named <- cov_iop2_vent[,c("Compound.Name",x)]
+
+cov_iop2_venonly <- cov_iop2_venonly[,order(colnames(cov_iop2_venonly))]
+
+#install.packages("ggVennDiagram")
+
+library(ggVennDiagram)
+
+ggVennDiagram(cov_iop2_venonly[,6:8])
+
+ggVennDiagram(cov_iop2_venonly[,1:4])
+
+ggVennDiagram(cov_iop2_venonly[,9:11])
+
+ggVennDiagram(cov_iop2_venonly[,12:15])
+
+com_list <- c(8,1,9,15)
+
+ggVennDiagram(cov_iop2_venonly[,com_list])
+
+com_list_bbmt <- c(1,4,9,11)
+
+ggVennDiagram(cov_iop2_venonly[,com_list_bbmt])
+```
+
+
+
+IOP1 cor
+```{r}
+cov_iop1 <- cov_ISnormnorm_ptnorm_iop1.named 
+
+names(cov_iop1) <- make.names(names(cov_iop1), unique = TRUE)
+
+
+analyte_sum_withcov_iop1 <- analyte_cumsum %>% 
+  left_join(cov_iop1) %>% 
+  left_join(tracers_all)
+
+tot_vol_iop1 <- sum(analyte_sum_withcov_iop1$sum_rawvol)
+
+bb_tracers <- tracers_all %>% 
+  filter(Tracer_category == "BB") %>% 
+  dplyr::select(Compound.Name)
+
+#bb_tracers_l <- str(bb_tracers)
+
+#df[ , names(df) %in% select.me]
+
+#tracks_with_bb <- analyte_sum_withcov_iop1[ ,names(analyte_sum_withcov_iop1) %in% bb_tracers_l]
+
+# note missing 1205_0335 blob 706 tracer
+analyte_sum_withcov_iop1_bbOA <- analyte_sum_withcov_iop1 %>% 
+  filter((X1129_1334_blob_662 > .7)|(X1129_1334_blob_820 > .7)| (X1202_1412_blob_1 > .7)| (X1221_0832_blob_976 > .7)) 
+
+bboa_vol_iop1 <- sum(analyte_sum_withcov_iop1_bbOA$sum_rawvol)
+
+mt_tracers <- tracers_all %>% 
+  filter(Tracer_category == "MT") %>% 
+  dplyr::select(Compound.Name)
+
+analyte_sum_withcov_iop1_mtsoa <- analyte_sum_withcov_iop1 %>% 
+  filter((X1221_0832_blob_5 > .7) |(X1128_1901_blob_794 > .7) |(X1128_1901_blob_811 > .7) |(X1221_0832_blob_42 > .7) |(X1221_0832_blob_33 > .7) |(X1221_0832_blob_29 > .7) |(X1221_0832_blob_22 > .7)) 
+
+mtoa_vol_iop1 <- sum(analyte_sum_withcov_iop1_mtsoa$sum_rawvol)
+
+sq_tracers <- tracers_all %>% 
+  filter(Tracer_category == "SQT") %>% 
+  dplyr::select(Compound.Name)
+
+analyte_sum_withcov_iop1_sqsoa <- analyte_sum_withcov_iop1 %>% 
+  filter((X1202_1412_blob_766 > .7)| (X1221_0832_blob_953 > .7))
+
+sqvol_vol_iop1 <- sum(analyte_sum_withcov_iop1_sqsoa$sum_rawvol)
+
+isop_tracers <- tracers_all %>% 
+  filter(Tracer_category == "ISOP") %>% 
+  dplyr::select(Compound.Name)
+
+analyte_sum_withcov_iop1_isop <- analyte_sum_withcov_iop1 %>%  
+  filter((X1221_0832_blob_48 > .7)|(X1202_1412_blob_573 > .7)|(X1128_1901_blob_703 > .7))
+
+#analyte_sum_withcorr_isop1 <- analyte_sum_withcorr %>%  
+ # filter(X1202_1412_blob_573 > .7)
+# 
+# analyte_sum_withcorr_isop_c5alk2 <- analyte_sum_withcorr %>%  
+#   filter(X1128_1901_blob_703 > .7)
+
+isop_vol_iop1 <- sum(analyte_sum_withcov_iop1_isop$sum_rawvol)
+
+just_bb_iop1 <- analyte_sum_withcov_iop1_bbOA %>% 
+  anti_join(analyte_sum_withcov_iop1_isop) %>% 
+  anti_join(analyte_sum_withcov_iop1_mtsoa) %>% 
+  anti_join(analyte_sum_withcov_iop1_sqsoa) 
+
+just_mt_iop1 <- analyte_sum_withcov_iop1_mtsoa %>% 
+  anti_join(analyte_sum_withcov_iop1_isop) %>% 
+  anti_join(analyte_sum_withcov_iop1_bbOA) %>% 
+  anti_join(analyte_sum_withcov_iop1_sqsoa) 
+
+just_isop_iop1 <- analyte_sum_withcov_iop1_isop %>% 
+  anti_join(analyte_sum_withcov_iop1_mtsoa) %>% 
+  anti_join(analyte_sum_withcov_iop1_bbOA) %>% 
+  anti_join(analyte_sum_withcov_iop1_sqsoa) 
+
+just_sq_iop1 <- analyte_sum_withcov_iop1_sqsoa %>% 
+  anti_join(analyte_sum_withcov_iop1_isop) %>% 
+  anti_join(analyte_sum_withcov_iop1_bbOA) %>% 
+  anti_join(analyte_sum_withcov_iop1_mtsoa) 
+
+isop_vol_iop1 <- sum(just_isop_iop1$sum_rawvol)
+bboa_vol_iop1 <- sum(just_bb_iop1$sum_rawvol)
+mtoa_vol_iop1 <- sum(just_mt_iop1$sum_rawvol)
+sqvol_vol_iop1 <- sum(just_sq_iop1$sum_rawvol)
+
+pie_bb_iop1 <- bboa_vol_iop1/tot_vol_iop1
+
+pie_mt_iop1 <- mtoa_vol_iop1/tot_vol_iop1
+
+pie_sq_iop1 <- sqvol_vol_iop1/tot_vol_iop1
+
+pie_isop_iop1 <- isop_vol_iop1/tot_vol_iop1
+
+pie_unknown_iop1 <- 1-(pie_bb_iop1+pie_mt_iop1+pie_sq_iop1+pie_isop_iop1)
+
+piecht_iop1 <- data.frame(group = c("Biomass Burning", "Monoterpenes", "Sesquiterpenes", "Isoprene", "Uncategorized"), 
+                     value = c(pie_bb_iop1, pie_mt_iop1, pie_sq_iop1, pie_isop_iop1, pie_unknown_iop1))
+piecht_iop1 %>% ggplot(aes(x = "", y = value, fill = group))+
+  geom_bar(width = 1, stat = "identity")+
+  coord_polar("y", start = 0)
+
+```
+
+now looking for correlations based on cov from iop1 and 2
+
+```{r}
+
+
+
+```
+
 
 ###**Bonus: Visualizing Data, Illustrating How Time-Series Will Be Utilized in Future**
 
@@ -2402,9 +2954,9 @@ install.packages("NMF")
 
 library(NMF)
 
-IOP1_nmf2 <- nmf(nnmf_matrix_top90_iop1, 5)
+IOP1_nmf2 <- nmf(nnmf_matrix_top90_iop1, 4)
 
-IOP2_nmf2 <- nmf(nnmf_matrix_top90_iop2, 5)
+IOP2_nmf2 <- nmf(nnmf_matrix_top90_iop2, 4)
 
 fit <- IOP1_nmf2@residuals
 
@@ -2419,19 +2971,20 @@ Compound_chem_info_nmf <- Compound_chem_info
 
 sum(IOP1_nmf_factor_contributions$X5)
 
-IOP1_nmf_factor_timelines %>% ggplot(aes(x = iop1_rdates, y = X1), color = "red")+
-  geom_line()+
+IOP1_nmf_factor_timelines %>% ggplot(aes(x = iop1_rdates, y = X1))+
+  geom_line(color = "red")+
   geom_line(aes(x = iop1_rdates, y = X2), color = "orange")+
   geom_line(aes(x = iop1_rdates, y = X3), color = "yellow")+
   geom_line(aes(x = iop1_rdates, y = X4), color = "green")+
-  geom_line(aes(x = iop1_rdates, y = X5/4), color = "blue")
+  #geom_line(aes(x = iop1_rdates, y = X5/4), color = "blue")+
+  ylim(0, 5)
 
-IOP2_nmf_factor_timelines %>% ggplot(aes(x = iop2_rdates, y = X1), color = "red")+
-  geom_line()+
+IOP2_nmf_factor_timelines %>% ggplot(aes(x = iop2_rdates, y = X1))+
+  geom_line(color = "red")+
   geom_line(aes(x = iop2_rdates, y = X2), color = "orange")+
   geom_line(aes(x = iop2_rdates, y = X3), color = "yellow")+
   geom_line(aes(x = iop2_rdates, y = X4), color = "green")+
-  geom_line(aes(x = iop2_rdates, y = X5), color = "blue")+
+  #geom_line(aes(x = iop2_rdates, y = X5), color = "blue")+
   #geom_line(aes(x = iop2_rdates, y = X6), color = "purple")+
   ylim(0, 100)
   
@@ -2468,7 +3021,11 @@ factors_iop1 <- IOP1_nmf_factor_contributions %>%
   rownames_to_column()
 
 factors_iop1_long <- factors_iop1 %>% 
-  gather(nmf_factor, quantity, X1:X5,factor_key = TRUE)
+  gather(nmf_factor, quantity, X1:X4,factor_key = TRUE)
+
+factors_iop1_long$rowname <- reorder(factors_iop1_long$rowname, factors_iop1_long$quantity)
+
+factors_iop1_long$rowname <- factor(factors_iop1_long$rowname, levels=rev(levels(factors_iop1_long$rowname)))
 
 factors_iop1_long %>% filter(quantity > 2.5e-2) %>% 
   ggplot(aes(x = nmf_factor, y = quantity, fill = rowname))+
@@ -2479,7 +3036,7 @@ factors_iop2 <- IOP2_nmf_factor_contributions %>%
   rownames_to_column()
 
 factors_iop2_long <- factors_iop2 %>% 
-  gather(nmf_factor, quantity, X1:X5,factor_key = TRUE)
+  gather(nmf_factor, quantity, X1:X4,factor_key = TRUE)
 
 factors_iop2_long %>% filter(quantity > 2e-3) %>% 
   ggplot(aes(x = nmf_factor, y = quantity, fill = rowname))+
@@ -2488,5 +3045,11 @@ factors_iop2_long %>% filter(quantity > 2e-3) %>%
 
 
 ```
+Note: check on pmf how to decide how many factors to use
+Do the pmf without the fb compounds
+look up 1211_0119 
+add sesquiterpene libraries- look in google drive
+
+do pie chart as a function of time-
 
 Idea for IS normalization: normalize by IS[i, j]/mean(IS[i])
