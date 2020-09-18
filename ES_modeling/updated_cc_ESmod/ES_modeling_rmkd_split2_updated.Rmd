@@ -778,14 +778,14 @@ Analyte_positions <- Analyte_positions %>%
   mutate(relative_LRI2 = RI2/LRI2_avg)
 
 Analyte_pos_short <- Analyte_positions %>% 
-  select(relative_LRI, relative_LRI2)
+  dplyr::select(relative_LRI, relative_LRI2)
 
 IS_pos_short <- IS_positions_avg %>% 
-  select(relative_LRI, relative_LRI2)
+  dplyr::select(relative_LRI, relative_LRI2)
 
 IS_pos_short_dalk <- IS_positions_avg %>% 
   filter(startsWith(Compound.Name, 'dC'))%>% 
-  select(relative_LRI, relative_LRI2)
+  dplyr::select(relative_LRI, relative_LRI2)
 
 IS_positions_avg_dalk <- IS_positions_avg %>% 
   filter(startsWith(Compound.Name, 'dC'))
