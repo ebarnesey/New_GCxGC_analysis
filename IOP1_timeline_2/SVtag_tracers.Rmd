@@ -1,0 +1,1979 @@
+---
+title: "SVtag_tracer_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+
+library(flux)
+
+library(reshape2)
+
+library(factoextra)
+library(maptree)
+
+```
+
+## incorporating frequency
+
+```{r}
+IOP1_compfreq <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  mutate(tic = 1) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(n_occur = sum(tic)) %>% 
+  mutate(pct_occur = n_occur/nrow(bt_sum_iop1))
+
+IOP2_compfreq <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  mutate(tic = 1) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(n_occur = sum(tic)) %>% 
+  mutate(pct_occur = n_occur/nrow(bt_sum_iop2))
+
+backtraj <- read_csv("Blob_table_summary_deSa.csv") %>% 
+  dplyr::select(AMZ_date, BackTrajectory_Category)
+
+bt_sum_iop1_tj <- bt_sum_iop1 %>% 
+  left_join(backtraj, by = "AMZ_date")
+
+bt_sum_iop2_tj <- bt_sum_iop2 %>% 
+  left_join(backtraj, by = "AMZ_date")
+
+fulldates_iop1 <- read_csv("Blob_table_summary_fulldates_iop1.csv") %>% 
+  dplyr::select(AMZ_date, date_num) %>% 
+  mutate(r_date =   convertToDateTime(date_num)) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  filter(!is.na(r_date))
+
+fulldates_iop2 <- read_csv("Blob_table_summary_fulldates_iop2.csv") %>% 
+  dplyr::select(AMZ_date, date_num) %>% 
+  mutate(r_date =  mdy_hm(AMZ_date)) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  filter(!is.na(r_date))
+
+fulldates <- rbind(fulldates_iop1, fulldates_iop2)
+
+M_t_analyte_unique_IS_0filled <- M_t_analyte_unique_IS %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_0filled.r <- M_t_analyte_unique_IS %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_0filled1.w <- M_t_analyte_unique_IS %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0)
+
+M_t_analyte_unique_IS_0filled1.wr <- M_t_analyte_unique_IS %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0)
+
+M_t_analyte_unique_IS_0filled1 <- M_t_analyte_unique_IS %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_0filled1r <- M_t_analyte_unique_IS %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_0filled2.w <- M_t_analyte_unique_IS %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0)
+
+M_t_analyte_unique_IS_0filled2.wr <- M_t_analyte_unique_IS %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0)
+
+M_t_analyte_unique_IS_0filled2 <- M_t_analyte_unique_IS %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_0filled2r <- M_t_analyte_unique_IS %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>%
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+just_1dates <- bt_sum_iop1 %>% 
+  mutate(in_sample = 1) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  dplyr::select(r_date.f, in_sample)
+
+dates_leftout1 <- fulldates_iop1 %>% 
+  left_join(just_1dates, by = "r_date.f") %>% 
+  filter(is.na(in_sample)) %>% 
+  left_join(M_t_analyte_unique_IS_0filled1.w, by = "r_date") %>% 
+  dplyr::select(-r_date.f, -in_sample, -AMZ_date, -date_num)
+
+dates_leftout2 <- fulldates_iop2 %>% 
+  dplyr::select(r_date) %>% 
+  anti_join(bt_sum_iop2, by = "r_date") %>% 
+  left_join(M_t_analyte_unique_IS_0filled2.w)
+
+M_t_analyte_unique_IS_formerge <- M_t_analyte_unique_IS %>% 
+  dplyr::select(-vol_is_normnorm_ptnorm, -vol_is_rawnorm_ptnorm)
+
+M_t_analyte_unique_IS_na1r <- rbind(M_t_analyte_unique_IS_0filled1.wr, dates_leftout1) %>% 
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_na1 <- rbind(M_t_analyte_unique_IS_0filled1.w, dates_leftout1) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>%
+  left_join(M_t_analyte_unique_IS_na1r) %>% 
+  left_join(analyte_cumsum1, by = "Compound.Name") %>% 
+  left_join(bt_sum_iop1_tj, by = "r_date") %>% 
+  left_join(IOP1_filtertimes, by = "r_date") %>% 
+  left_join(Analyte_positions, by = "Compound.Name")
+
+M_t_analyte_unique_IS_na2r <- rbind(M_t_analyte_unique_IS_0filled2.w, dates_leftout2) %>% 
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS_na2 <- rbind(M_t_analyte_unique_IS_0filled2.w, dates_leftout2) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  left_join(M_t_analyte_unique_IS_na2r) %>% 
+  left_join(analyte_cumsum2, by = "Compound.Name") %>% 
+  left_join(bt_sum_iop2_tj, by = "r_date") %>% 
+  left_join(IOP2_filtertimes, by = "r_date") %>% 
+  left_join(Analyte_positions, by = "Compound.Name")
+  
+
+bbcheck1 <- M_t_analyte_unique_IS_na2 %>% left_join(alltracers) %>%  
+  filter(Tracer_key == "BB1")
+
+M_t_analyte_unique_IS_na1 %>% left_join(alltracers) %>%  
+  filter(Tracer_key == "BB1") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_line()
+
+M_t_analyte_unique_IS_na2 %>% left_join(alltracers) %>%  
+  filter(Tracer_key == "BB1") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_line()
+
+M_t_analyte_unique_IS_na2 %>% left_join(alltracers) %>%  
+  filter(Tracer_key == "BB1") %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line()
+
+just_a2_na <- M_t_analyte_unique_IS_na2 %>% 
+  filter(Compound.Name == "1221_0832_blob_100")
+
+just_a1_na <- M_t_analyte_unique_IS_na1 %>% 
+  filter(Compound.Name == "1221_0832_blob_100")
+
+
+```
+
+
+
+## Incorporating SV tag tracers
+
+```{r}
+SVtag_IOP2 <- read_csv("GoAmazon_IOP2_SVtag.csv") 
+
+sv_names <- names(SVtag_IOP2)[6:203]
+
+
+
+
+sv_frame <- data.frame(matrix(NA, nrow = nrow(bt_sum_iop2), ncol = length(sv_names)))
+
+names(sv_frame) <- sv_names
+
+IOP2_svtag_filtertimes <- bt_sum_iop2 %>% 
+  dplyr::select(File_num, AMZ_date, Date_num, r_date) 
+
+IOP2_svtag_filtertimes <- cbind(IOP2_svtag_filtertimes, sv_frame)
+
+
+# note should go back and determine if AUC needed or just average
+for(i in 1:nrow(IOP2_svtag_filtertimes)){
+  
+  
+  t_start = IOP2_svtag_filtertimes$Date_num[i]
+  # note: the .16 is because of the sample times, must customize to own sample period or have both start and stop times in data
+  t_end = t_start + .16
+  
+  temp_svtag_iop2 <- SVtag_IOP2 %>% 
+    filter(TAG_time_start_num >= t_start) %>% 
+    filter(TAG_time_end_num <= t_end)
+  
+  if(nrow(temp_svtag_iop2) == 0){
+    next
+  }
+  
+  for(j in 1:length(sv_names)){
+    
+    
+    name_ofsv <- sv_names[j] 
+    
+    svtag_vals <- temp_svtag_iop2[,name_ofsv]
+    isna_svtag <- is.na(svtag_vals)
+    
+    if(nrow(svtag_vals)== sum(isna_svtag)){
+      next
+    }
+    
+    svtag_num = sum(svtag_vals, na.rm = TRUE)/(nrow(svtag_vals)- sum(isna_svtag))
+    
+    
+    IOP2_svtag_filtertimes[i, name_ofsv] <- svtag_num
+    
+    
+  }
+  
+  
+}
+
+
+
+```
+
+levoglucosan_plotting
+```{r}
+
+SVtag_check_iop2 <- M_t_analyte_unique_IS_na2 %>% 
+  #filter(IOP ==2) %>% 
+  left_join(IOP2_svtag_filtertimes, by = "r_date") %>% 
+  left_join(alltracers, by = "Compound.Name")
+
+just_lev_svcheck <- SVtag_check_iop2 %>% 
+  filter(Tracer_key == "BB1")
+
+
+just_lev_svcheck %>% ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_line(color = "black")+
+  geom_line(aes(x = r_date, y = C36_levoglucosan_Particle*500), color = "red")+
+  ggtitle("Levoglucosan SV tag Comparison: Red SV tag, Black GCxGC")
+
+just_BB3_svcheck <- SVtag_check_iop2 %>% 
+  filter(Tracer_key == "BB3")
+
+
+just_lev_svcheck %>% ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "black")+
+  geom_line(aes(x = r_date, y = C173_Galactosan_Total/25), color = "red")+
+  ggtitle("Galactosan SV tag Comparison: Red SV tag, Black GCxGC")
+
+
+just_MT1_svcheck <- SVtag_check_iop2 %>% 
+  filter(Tracer_key == "MT1")
+
+
+just_MT1_svcheck %>% ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "black")+
+  geom_line(aes(x = r_date, y = C39_pinic_acid_Total/800), color = "red")+
+  ggtitle("Pinic Acid SV tag Comparison: Red SV tag, Black GCxGC")
+
+just_MT2_svcheck <- SVtag_check_iop2 %>% 
+  filter(Tracer_key == "MT2")
+
+
+just_MT2_svcheck %>% ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "black")+
+  geom_line(aes(x = r_date, y = C40_pinonic_acid_Particle/800), color = "red")+
+  ggtitle("Pinonic Acid SV tag Comparison: Red SV tag, Black GCxGC")
+
+
+just_ISOP2_svcheck <- SVtag_check_iop2 %>% 
+  filter(Tracer_key == "ISOP2")
+
+
+just_ISOP2_svcheck %>% ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "black")+
+  geom_line(aes(x = r_date, y = C31_methyl_tetrol_1_Particle/8800), color = "red")+
+  ggtitle("2-MT 1 SV tag Comparison: Red SV tag, Black GCxGC")
+
+
+#C31_methyl_tetrol_1_Particle
+
+```
+```{r}
+manual_ass_iop1_all <- read_csv("IOP1_manual_assignments_edited_rd1.csv") %>% 
+  left_join(IOP1_compfreq, by = "Compound.Name")
+
+just_positions_RI2 <- Analyte_with_IS_positions %>% 
+  dplyr::select(Compound.Name, RI2)
+
+chamber_terp_iop1 <- manual_ass_iop1_all %>% 
+  filter(Library.Match.Factor_chamber > 700)%>% 
+  filter(!is.na(man_cat1)) %>% 
+  left_join(just_positions_RI2)
+
+
+
+table(chamber_terp_iop1$man_cat1)
+
+chamber_terp_iop1 %>% 
+  ggplot()+
+  geom_point(aes(x = AMS1_PMF_3r2, y = cumsum_ISnormnorm))
+
+chamber_terp_iop1 %>% 
+  ggplot()+
+  geom_point(aes(x = BB1, y = cumsum_ISnormnorm))
+
+chamber_terp_iop1 %>% 
+  ggplot()+
+  geom_point(aes(x = ISOP1, y = cumsum_ISnormnorm))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = BB1, y = RI2))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = MT1, y = RI2))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = AMS1_PMF_2r2, y = RI2))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = A1, y = LRI.I))
+
+chamber_terp_iop1 %>% 
+  left_join(Analyte_positions, by = "Compound.Name") %>% 
+  ggplot(aes(x = A1, y = LRI.I, color = cumsum_ISnormnorm))+
+  geom_point()
+
+
+  
+
+chamber_terp_iop1 %>% 
+  left_join(Analyte_positions, by = "Compound.Name") %>%  
+  ggplot(aes(x = A1, y = RI2.x, color = cumsum_ISnormnorm))+
+  geom_point()
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = LRI.I, y = RI2, color = AMS1_PMF_4r2))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = LRI.I, y = RI2, color = AMS1_PMF_2r2))
+
+chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = LRI.I, y = RI2, color = A1))
+
+ctlong <- chamber_terp_iop1 %>% 
+  filter(pct_occur > .4)
+
+chamber_terp_iop1_acor <- chamber_terp_iop1 %>% 
+  filter(A1 > .8)
+
+chamber_terp_iop1_a_nocor <- chamber_terp_iop1 %>% 
+  filter(A1 < .2)
+  
+chamber_terp_iop1_bbcor <- chamber_terp_iop1 %>% 
+  filter(BB1 > .7)
+
+chamber_terp_iop1_bb_nocor <- chamber_terp_iop1 %>% 
+  filter(BB1 < .2)
+
+chamber_terp_iop1_bbamscor <- chamber_terp_iop1 %>% 
+  filter(AMS1_PMF_4r2 > .6)
+
+chamber_terp_iop1_bbams_nocor <- chamber_terp_iop1 %>% 
+  filter(AMS1_PMF_4r2 < .2)
+
+chamber_terp_iop1_anthroamscor <- chamber_terp_iop1 %>% 
+  filter(AMS1_PMF_6r2 > .5)
+
+chamber_terp_iop1_anthroams_nocor <- chamber_terp_iop1 %>% 
+  filter(AMS1_PMF_6r2 < .2)
+
+chamber_terp_iop1_acor <- chamber_terp_iop1 %>% 
+  filter(A1 > .7)
+
+chamber_terp_iop1_a_nocor <- chamber_terp_iop1 %>% 
+  filter(A1 < .2)
+
+ct1_a <- chamber_terp_iop1_acor %>% 
+  mutate(is_chamterp = 1) %>% 
+  filter(n_occur > 15) %>% 
+  filter(cumsum_ISnormnorm> .001)%>% 
+  dplyr::select(is_chamterp, Compound.Name)
+
+chamber_terp_iop1_anthrotrace <- M_t_analyte_unique_IS_na1 %>% 
+  #filter(IOP == 2) %>% 
+  left_join(ct1_a) %>% 
+  filter(is_chamterp == 1)
+
+
+
+
+```
+
+```{r}
+manual_ass_iop2_all <- read_csv("IOP2_manual_assignments_edited_rd1.csv") %>% 
+  left_join(IOP2_compfreq, by = "Compound.Name")
+
+
+chamber_terp_iop2 <- manual_ass_iop2_all %>% 
+  filter(Library.Match.Factor_chamber > 700 ) %>% 
+  filter(!is.na(man_cat2))%>% 
+  left_join(just_positions_RI2)
+
+table(chamber_terp_iop2$man_cat2)
+
+chamber_terp_iop2_acor <- chamber_terp_iop2 %>% 
+  filter(A1 > .7)
+
+chamber_terp_iop2 %>% 
+  left_join(Analyte_positions, by = "Compound.Name") %>% 
+  ggplot(aes(x = A1, y = LRI.I, color = cumsum_ISnormnorm))+
+  geom_point()
+
+
+  
+
+chamber_terp_iop2 %>% 
+  left_join(Analyte_positions, by = "Compound.Name") %>%  
+  ggplot(aes(x = A1, y = RI2.x, color = cumsum_ISnormnorm))+
+  geom_point()
+
+chamber_terp_iop2_a_nocor <- chamber_terp_iop2 %>% 
+  filter(A1 < .2)
+
+chamber_terp_iop2_bbcor <- chamber_terp_iop2 %>% 
+  filter(BB1 > .8)
+
+chamber_terp_iop2_bb_nocor <- chamber_terp_iop2 %>% 
+  filter(BB1 < .2)
+
+chamber_terp_iop2_bbamscor <- chamber_terp_iop2 %>% 
+  filter(AMS2_PMF_4r2 > .6)
+
+chamber_terp_iop2_bbams_nocor <- chamber_terp_iop2 %>% 
+  filter(AMS2_PMF_4r2 < .2)
+
+chamber_terp_iop2_anthroamscor <- chamber_terp_iop2 %>% 
+  filter(AMS2_PMF_6r2 > .5)
+
+chamber_terp_iop2_anthroams_nocor <- chamber_terp_iop2 %>% 
+  filter(AMS2_PMF_6r2 < .2)
+
+
+chamber_terp_iop2 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = BB1, y = RI2))
+
+chamber_terp_iop2 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = MT1, y = RI2))
+
+chamber_terp_iop2 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = AMS2_PMF_5r2, y = LRI.I))
+
+chamber_terp_iop2 %>% 
+  filter(pct_occur > .4) %>% 
+  ggplot()+
+  geom_point(aes(x = AMS2_PMF_2r2, y = LRI.I))
+
+chamber_terp_iop2.c <- chamber_terp_iop2 %>% 
+  filter(pct_occur > .4)
+
+
+ct2_a <- chamber_terp_iop2_acor %>% 
+  mutate(is_chamterp = 1) %>% 
+  dplyr::select(is_chamterp, Compound.Name)
+
+chamber_terp_iop2_anthrotrace <- M_t_analyte_unique_IS_na2 %>% 
+  #filter(IOP == 2) %>% 
+  left_join(ct2_a) %>% 
+  filter(is_chamterp == 1) 
+
+# ggplot()+
+#   geom_col(data = chamber_terp_iop2, aes(x = r_date, y = 350, fill = BackTrajectory_Category))+
+#   scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey30", "Baseline" = "grey70"))+
+#   geom_line(data = chamber_terp_iop2_anthrotrace, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+#   geom_line(data = just_a2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*3000, color = "Urban Plume Tracer"))+
+#   ylab("Internal Standard Normalized Instrument Volume")+
+#   ggtitle("Tracers of Anthropogenically Influenced Monoterpene Oxidation")
+
+
+ct2 <- chamber_terp_iop2 %>% 
+  mutate(is_chamterp = 1) %>% 
+  dplyr::select(is_chamterp, Compound.Name)
+
+chamber_terp_iop2_t <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  left_join(ct2) %>% 
+  filter(is_chamterp == 1) %>% 
+  group_by(r_date) %>% 
+  summarise(tot_vol = sum(Volume), avg_LRI = mean(LRI.I), weighted_avg_LRI = sum(LRI.I * Volume)/tot_vol, avg_RI2 = mean(Retention.II..sec.), weighted_avg_RI2 = sum(Retention.II..sec.*Volume)/tot_vol) %>% 
+  left_join(IOP2_filtertimes, by = "r_date") %>% 
+  left_join(bt_sum_iop2_tj, by = "r_date")
+
+#col2<- c("Urban Plume Tracer" = "black", )
+ggplot()+
+  geom_col(data = chamber_terp_iop2_t, aes(x = r_date, y = 350, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey30", "Baseline" = "grey70"))+
+  geom_line(data = just_a2_na, aes(x = r_date, y = vol_is_rawnorm_ptnorm/2, color = "Urban Plume Tracer"))+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_iop2_anthrotrace, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  ylab("Internal Standard Normalized Instrument Volume")+
+  ggtitle("Tracers of Anthropogenically Influenced Monoterpene Oxidation")
+
+
+
+just_bb_na2 <- M_t_analyte_unique_IS_na2 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+chamber_terp_bb2_tseries <- chamber_terp_iop2_bbcor %>% 
+  dplyr::select(Compound.Name) %>% 
+  left_join(M_t_analyte_unique_IS_na2)
+
+
+ggplot()+
+  geom_col(data = chamber_terp_iop2_t, aes(x = r_date, y = 75, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey30", "Baseline" = "grey70"))+
+  geom_line(data = just_bb_na2, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3500, color = "Biomass Burning Tracer"))+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_bb2_tseries, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  ylab("Internal Standard Normalized Instrument Volume")+
+  ggtitle("Tracers of Biomass Burning Influenced Monoterpene Oxidation")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = avg_LRI-1600))+
+  geom_line(aes(x = r_date, y = AMS_PMF_5*10))
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = weighted_avg_LRI-min(weighted_avg_LRI+150)))+
+  geom_line(aes(x = r_date, y = AMS_PMF_5*50))
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_col(aes(x = r_date, y = max(AMS_PMF_5), fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey30", "Baseline" = "grey70"))+
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_5))+
+  ylab("AMS MOBBOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_col(aes(x = r_date, y = max(weighted_avg_RI2), fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey30", "Baseline" = "grey70"))+
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-1, color = "red"))+
+  ylab("Signal Weighted Average Polarity (red)")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_4))+
+  ylab("AMS LOBBOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_3))+
+  ylab("AMS MOOOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_2))+
+  ylab("AMS LOOOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = tot_vol/250000), color = "orange")+
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_2))+
+  ylab("AMS LOOOA factor (black), \nSignal Weighted Average Polarity (red) \n and total monoterpene abundance (orange)")
+
+
+chamber_terp_iop2_t %>% 
+  ggplot() +
+  geom_line(aes(x = r_date, y = 80-(weighted_avg_LRI-min(weighted_avg_LRI)-180)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_5*10))+
+  ylab("AMS MOBBOA factor (black) and \nSignal Weighted Average Volatility (red)")
+
+
+
+
+
+chamber_terp_iop2_t %>% 
+  ggplot()+
+  geom_point(aes(x = AMS_PMF_5, y = weighted_avg_RI2))
+
+chamber_terp_iop2_t %>% 
+  ggplot()+
+  geom_point(aes(x = AMS_PMF_5, y = sqrt(weighted_avg_LRI)))
+```
+
+
+```{r}
+## now looking at IOP1
+
+ct1 <- chamber_terp_iop1 %>% 
+  mutate(is_chamterp = 1) %>% 
+  dplyr::select(is_chamterp, Compound.Name)
+
+chamber_terp_iop1_t <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  left_join(ct1) %>% 
+  filter(is_chamterp == 1) %>% 
+  group_by(r_date) %>% 
+  #filter(!is.na(vol_is_normnorm_ptnorm)) %>% 
+  summarise(tot_vol = sum(Volume), avg_LRI = mean(LRI.I), weighted_avg_LRI = sum(LRI.I * Volume)/tot_vol, avg_RI2 = mean(Retention.II..sec.), weighted_avg_RI2 = sum(Retention.II..sec.*Volume)/tot_vol) %>% 
+  left_join(IOP1_filtertimes, by = "r_date") %>% 
+  left_join(bt_sum_iop1_tj, by = "r_date")
+
+chamber_terp_iop1_t.d <- chamber_terp_iop1_t %>% 
+  mutate(r_date.d = floor_date(r_date, unit = "days")) %>% 
+  mutate(day_tic = 1) %>% 
+  group_by(r_date.d) %>% 
+  summarise(is_fullday = sum(day_tic)-1, weighted_avg_LRI= mean(weighted_avg_LRI, na.rm = TRUE), weighted_avg_RI2= mean(weighted_avg_RI2, na.rm = TRUE), tot_vol = mean(tot_vol, na.rm = TRUE), AMS_PMF_1= mean(AMS_PMF_1, na.rm = TRUE), AMS_PMF_2= mean(AMS_PMF_2, na.rm = TRUE), AMS_PMF_3= mean(AMS_PMF_3, na.rm = TRUE), AMS_PMF_4= mean(AMS_PMF_4, na.rm = TRUE), AMS_PMF_5= mean(AMS_PMF_5, na.rm = TRUE), AMS_PMF_6= mean(AMS_PMF_6, na.rm = TRUE)) %>% 
+  distinct()
+
+chamber_terp_iop1_t %>% 
+  ggplot() +
+  geom_col(aes(x = r_date, y = 1, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_4))+
+  ylab("AMS BBOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop1_t %>% 
+  ggplot() +
+  geom_col(aes(x = r_date, y = 1, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  geom_line(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date, y = AMS_PMF_2))+
+  ylab("AMS MOOOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+chamber_terp_iop1_t %>% 
+  ggplot() +
+  geom_col(aes(x = r_date, y = 1, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  geom_point(aes(x = r_date, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_point(aes(x = r_date, y = AMS_PMF_2))+
+  ylab("AMS MOOOA factor (black) and \nSignal Weighted Average Polarity (red)")
+
+
+
+chamber_terp_iop1_t.d %>% 
+  ggplot() +
+  geom_line(aes(x = r_date.d, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date.d, y = AMS_PMF_4))+
+  ylab("AMS BBOA factor (black) and \nSignal Weighted Average Polarity (red)")+
+  ggtitle("Daily Averaged Wet Season")
+
+chamber_terp_iop1_t.d %>% 
+  ggplot() +
+  geom_line(aes(x = r_date.d, y = weighted_avg_RI2-min(weighted_avg_RI2)), color = "red")+
+  geom_line(aes(x = r_date.d, y = AMS_PMF_2))+
+  ylab("AMS MOOOA factor (black) and \nSignal Weighted Average Polarity (red)")+
+  ggtitle("Daily Averaged Wet Season")
+
+chamber_terp_iop1_t.d %>% 
+  ggplot() +
+  geom_line(aes(x = r_date.d, y = weighted_avg_LRI-min(weighted_avg_LRI)), color = "red")+
+  geom_line(aes(x = r_date.d, y = AMS_PMF_4*80))+
+  ylab("AMS BBOA factor (black) and \nSignal Weighted Average Polarity (red)")+
+  ggtitle("Daily Averaged Wet Season")
+
+p20 <- ggplot()+
+  # geom_col(data = chamber_terp_iop1_t, aes(x = r_date, y = .1, fill = BackTrajectory_Category))+
+  # scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_iop1_anthrotrace, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_line(data = just_a1_na, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = "Urban Plume Tracer"), size = 1.2)+
+  ylab("Internal Standard \nNormalized Instrument Volume")+
+  xlab("")+
+  ggtitle("Wet Season Tracers of Anthropogenically \nInfluenced Monoterpene Oxidation")+
+  scale_color_discrete(name = "Monoterpene \nOxidation Products", labels = c("A", "B", "C", "D", "E", "F", "G", "H", "Urban Plume Tracer"))+
+  theme_bw()+
+  theme(text = element_text(size = 14))+
+  xlim(just_a1$r_date[25], just_a1$r_date[54])
+
+p20
+
+
+p21 <- ggplot()+
+  # geom_col(data = chamber_terp_iop1_t, aes(x = r_date, y = .1, fill = BackTrajectory_Category))+
+  # scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_iop2_anthrotrace, aes(x = r_date, y = vol_is_rawnorm_ptnorm/cumsum_ISrawnorm, color = Compound.Name))+
+  # geom_line(data = just_a2_na, aes(x = r_date, y = vol_is_rawnorm_ptnorm/4000), color = "black")+
+  ylab("Internal Standard \nNormalized Instrument Volume")+
+  ggtitle("Dry Season Tracers of Anthropogenically Influenced Monoterpene Oxidation")
+  xlim(just_a2$r_date[12], just_a2$r_date[64])
+  
+p21
+
+chamber_terp_iop1_anthrotrace.m <- chamber_terp_iop1_anthrotrace %>% 
+  left_join(just_a1.m)
+
+chamber_terp_iop2_anthrotrace.m <- chamber_terp_iop2_anthrotrace %>% 
+  left_join(just_a2.m)
+
+p22 <- chamber_terp_iop1_anthrotrace.m %>% 
+  filter(Compound.Name == "1221_0832_blob_42"| Compound.Name == "1221_0832_blob_35") %>% 
+  ggplot(aes(x = a1.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm/cumsum_ISrawnorm, color = Compound.Name))+
+  geom_point()+
+  scale_color_discrete(name = "Monoterpene \nOxidation Products", labels = c("Unidentified Alpha Pinene\nOxidation Product", "Unidentified Limonene\nOxidation Product"))+
+  ggtitle("Monoterpene Oxidation Products \nAssociated with Urban Influence")+
+  xlab("Normalized Anthropogenic Tracer Signal")+
+  ylab("Normalized Monoterpene \nOxidation Product Signal")+
+  theme_bw()+
+  theme(text = element_text(size = 14))
+
+
+p22
+
+o_a_chamterp<- chamber_terp_iop1_acor %>% 
+  dplyr::select(Compound.Name) %>% 
+  mutate(in_both = 1) %>% 
+  right_join(chamber_terp_iop2_acor) %>% 
+  filter(in_both ==1)
+
+p23 <- chamber_terp_iop2_anthrotrace.m %>% 
+  filter(Compound.Name == "1128_1901_blob_756") %>% 
+  ggplot(aes(x = a2.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm/cumsum_ISrawnorm, color = Compound.Name))+
+  geom_point()+
+  ylim(0, 1e6)
+
+p23
+
+p24 <- chamber_terp_iop2_anthrotrace.m %>% 
+  filter(Compound.Name == "1221_0832_blob_1121") %>% 
+  ggplot(aes(x = a2.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm/cumsum_ISrawnorm, color = Compound.Name))+
+  geom_point()+
+  ylim(0, 1e6)
+
+p24
+
+
+
+
+
+
+just_bb_na1 <- M_t_analyte_unique_IS_na1 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+chamber_terp_bb1_tseries <- chamber_terp_iop1_bbcor %>% 
+  dplyr::select(Compound.Name) %>% 
+  left_join(M_t_analyte_unique_IS_na1)
+
+
+
+
+ggplot()+
+  # geom_col(data = chamber_terp_iop1_t, aes(x = r_date, y = .01, fill = BackTrajectory_Category))+
+  # scale_fill_manual("", values = c("Polluted" = "grey30", "Baseline" = "grey70"))+
+  geom_line(data = just_bb_na1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/100), color = "black")+
+  geom_point(data = just_bb_na1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/100), color = "black")+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_bb1_tseries, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  ylab("Internal Standard Normalized Instrument Volume")+
+  ggtitle("Tracers of Biomass Burning Influenced Monoterpene Oxidation")
+
+
+
+p18 <- ggplot()+
+  geom_line(data = just_bb_na1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/100), color = "black")+
+  geom_point(data = just_bb_na1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/100), color = "black")+
+  #scale_color_manual(values = col2)+
+  geom_line(data = chamber_terp_bb1_tseries, aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  ylab("Internal Standard Normalized Instrument Volume")+
+  ggtitle("Tracers of Biomass Burning Influenced Monoterpene Oxidation")
+
+p18
+
+```
+
+
+```{r}
+chamber_terp_iop1_cont <- chamber_terp_iop1 %>% 
+  filter(pct_occur > .4) %>% 
+  mutate(cont = 1)
+
+chamber_terp_iop2_cont <- chamber_terp_iop2 %>% 
+  filter(pct_occur > .4) %>% 
+  mutate(cont = 1)
+
+
+
+iop1_terptrack <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  left_join(chamber_terp_iop1_cont, by = "Compound.Name") %>% 
+  filter(cont == 1) %>% 
+  mutate(plot_vol = vol_is_normnorm_ptnorm/cumsum_ISnormnorm)
+
+iop1_terptrack %>% ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+ theme(legend.position = "none") 
+
+
+iop2_terptrack <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  left_join(chamber_terp_iop2_cont, by = "Compound.Name") %>% 
+  filter(cont == 1) %>% 
+  mutate(plot_vol = vol_is_normnorm_ptnorm/cumsum_ISnormnorm)
+
+iop2_terptrack %>% ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+ theme(legend.position = "none") 
+
+
+terp_cov_iop1 <- iop1_terptrack %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+terpcor1 <- data.frame(cor(terp_cov_iop1, use ="pairwise.complete.obs"))
+
+terp_cov_iop2 <- iop2_terptrack %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+terpcor2 <- data.frame(cor(terp_cov_iop2, use ="pairwise.complete.obs"))
+```
+
+
+
+```{r}
+#install.packages("maptree")
+#library(maptree)
+
+
+dissimilarity = 1 - terpcor1
+distance = as.dist(dissimilarity)
+clus <- hclust(distance)
+op_k <- kgs(clus, distance, maxclus = 20)
+plot (names (op_k), op_k, xlab="# clusters", ylab="penalty")
+
+plot(clus)
+
+
+mds.coor <- cmdscale(distance)
+plot(mds.coor[,1], mds.coor[,2], type="n", xlab="", ylab="")
+text(jitter(mds.coor[,1]), jitter(mds.coor[,2]),
+     rownames(mds.coor), cex=0.8)
+abline(h=0,v=0,col="gray75")
+
+
+
+fviz_dend(clus, rect = TRUE)
+
+clusterCut1 <- data.frame(cutree(clus, 6)) %>% 
+  tibble::rownames_to_column("Compound.Name")
+
+names(clusterCut1)[2] <- "Cluster"
+
+
+
+iop1_terptrack_clust <- iop1_terptrack %>% 
+  left_join(clusterCut1)
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 1) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 1")
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 2) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 2")
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 3) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 3")
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 4) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 4")
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 5) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 5")
+
+iop1_terptrack_clust %>% 
+  filter(Cluster == 6) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 6")
+
+iop1_visclust <- iop1_terptrack_clust %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(plot_vol_clust = mean(plot_vol)) %>% 
+  mutate(cluster.f = as.factor(Cluster))
+
+iop1_visclust %>% ggplot(aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line()
+
+iop1_terptrack_tod <- iop1_terptrack_clust %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(T_O_D = T_O_D, vol = mean(plot_vol)) %>% 
+  distinct() %>% 
+  mutate(Cluster.f = as.factor(Cluster))
+
+iop1_terptrack_tod %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol, color = Cluster.f))+
+  geom_point(aes(x = r_date, y = vol, color = T_O_D))
+
+
+ggplot()+
+  geom_line(data = iop1_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+iop1_visclust.1 <- iop1_visclust %>% 
+  filter(cluster.f == 1)
+
+ggplot()+
+  geom_line(data = iop1_visclust.1, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+iop1_visclust.2 <- iop1_visclust %>% 
+  filter(cluster.f == 2)
+
+ggplot()+
+  geom_line(data = iop1_visclust.2, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+iop1_visclust.3 <- iop1_visclust %>% 
+  filter(cluster.f == 3)
+
+ggplot()+
+  geom_line(data = iop1_visclust.3, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+iop1_visclust.4 <- iop1_visclust %>% 
+  filter(cluster.f == 4)
+
+ggplot()+
+  geom_line(data = iop1_visclust.4, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+
+iop1_visclust.5 <- iop1_visclust %>% 
+  filter(cluster.f == 5)
+
+ggplot()+
+  geom_line(data = iop1_visclust.5, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+iop1_visclust.6 <- iop1_visclust %>% 
+  filter(cluster.f == 6)
+
+ggplot()+
+  geom_line(data = iop1_visclust.6, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*10e4))+
+  geom_line(data = just_a1_na, aes (x = r_date, y = vol_is_normnorm_ptnorm*90), color = "orange")
+
+
+```
+Clustering IOP2
+
+```{r}
+
+T_O_D_col <- read_csv("T_O_D_colors.csv")
+
+IOP2_filtertimes_tod <- IOP2_filtertimes %>% 
+  left_join(bt_sum_iop2, by = "r_date") %>% 
+  left_join(T_O_D_col)
+  
+
+dissimilarity = 1 - terpcor2
+distance = as.dist(dissimilarity)
+clus <- hclust(distance)
+op_k <- kgs(clus, distance, maxclus = 20)
+plot (names (op_k), op_k, xlab="# clusters", ylab="penalty")
+
+plot(clus)
+
+
+mds.coor <- cmdscale(distance)
+plot(mds.coor[,1], mds.coor[,2], type="n", xlab="", ylab="")
+text(jitter(mds.coor[,1]), jitter(mds.coor[,2]),
+     rownames(mds.coor), cex=0.8)
+abline(h=0,v=0,col="gray75")
+
+#install.packages("factoextra")
+#library(factoextra)
+
+fviz_dend(clus, rect = TRUE)
+
+clusterCut2 <- data.frame(cutree(clus, 4)) %>% 
+  tibble::rownames_to_column("Compound.Name")
+
+names(clusterCut2)[2] <- "Cluster"
+
+
+
+iop2_terptrack_clust <- iop2_terptrack %>% 
+  left_join(clusterCut2)
+
+iop2_terptrack_clust %>% 
+  filter(Cluster == 1) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 1")
+
+iop2_terptrack_clust %>% 
+  filter(Cluster == 2) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 2")
+
+iop2_terptrack_clust %>% 
+  filter(Cluster == 3) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 3")
+
+iop2_terptrack_clust %>% 
+  filter(Cluster == 4) %>% 
+  ggplot(aes(x = r_date, y = plot_vol, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "none")+
+  ggtitle("Cluster 4")
+
+iop2_visclust <- iop2_terptrack_clust %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(plot_vol_clust = mean(plot_vol)) %>% 
+  mutate(cluster.f = as.factor(Cluster))
+
+ 
+ggplot()+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+ 
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_1*1e4))
+
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_6*1e4))+
+   xlim(IOP2_filtertimes_tod$r_date[35], IOP2_filtertimes_tod$r_date[80])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_6*2e4))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_5*2e4), color = "red")+
+   xlim(IOP2_filtertimes_tod$r_date[35], IOP2_filtertimes_tod$r_date[80])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_6*2e4))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_5*2e4), color = "red")+
+  geom_line(data = just_a2, aes (x = r_date, y = Volume*20), color = "orange")+
+   xlim(IOP2_filtertimes_tod$r_date[35], IOP2_filtertimes_tod$r_date[100])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_6*2e4))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_5*2e4), color = "red")+
+  geom_line(data = just_a2, aes (x = r_date, y = Volume*20), color = "orange")
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 1.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_5*1.2e4))+
+  geom_line(data = just_a2, aes (x = r_date, y = Volume*20), color = "orange")+
+   xlim(IOP2_filtertimes_tod$r_date[5], IOP2_filtertimes_tod$r_date[30])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 1.5e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_5*1.2e4))+
+  geom_line(data = just_a2, aes (x = r_date, y = Volume*20), color = "orange")+
+   xlim(IOP2_filtertimes_tod$r_date[85], IOP2_filtertimes_tod$r_date[129])
+
+
+
+
+iop2_terptrack_tod <- iop2_terptrack_clust %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(T_O_D = T_O_D, vol = mean(plot_vol)) %>% 
+  distinct()%>% 
+  mutate(Cluster.f = as.factor(Cluster))
+ 
+
+iop2_terptrack_tod %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol, color = Cluster.f))+
+  geom_point(aes(x = r_date, y = vol, color = T_O_D))+
+  xlim(iop2_terptrack_tod$r_date[35], iop2_terptrack_tod$r_date[80])
+
+
+ggplot()+
+  geom_col(data = bt_sum_iop2_tj, aes(x = r_date, y = 2.5e5, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey70", "Background" = "grey30"))
+
+p25 <- ggplot()+
+  # geom_col(data = bt_sum_iop2_tj, aes(x = r_date, y = 2.5e5, fill = BackTrajectory_Category))+
+  # scale_fill_manual("", values = c("Event" = "grey50", "Urban" = "grey70", "Background" = "grey30"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  xlim(just_a2$r_date[12], just_a2$r_date[64])+
+  scale_color_discrete(name = "Timeseries Clusters")+
+  theme_bw()+
+  ylab("Normalized Cluster Volume")+
+  xlab("Date")+
+  ggtitle("Dry Season Preliminary Clusters")+
+  theme(text = element_text(size = 14))
+
+p25
+
+ggplot()+
+  geom_col(data = bt_sum_iop2_tj, aes(x = r_date, y = 2.5e5, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Baseline" = "grey40","Event" = "grey50", "Urban" = "grey60"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))
+
+```
+terp plots for allen
+
+```{r}
+ams_56 <- IOP2_filtertimes %>% 
+  dplyr::select(r_date, AMS_PMF_5, AMS_PMF_4) %>%
+  rename(MOBBOA = AMS_PMF_5, LOBBOA = AMS_PMF_4 ) %>% 
+  gather("PMF_factor", "PMF_factor.amt", -r_date)
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+   xlim(IOP2_filtertimes_tod$r_date[35], IOP2_filtertimes_tod$r_date[80])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")+
+  xlim(IOP2_filtertimes_tod$r_date[32], IOP2_filtertimes_tod$r_date[85])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")+
+  xlim(IOP2_filtertimes_tod$r_date[32], IOP2_filtertimes_tod$r_date[100])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")+
+  xlim(IOP2_filtertimes_tod$r_date[1], IOP2_filtertimes_tod$r_date[30])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")+
+  xlim(IOP2_filtertimes_tod$r_date[1], IOP2_filtertimes_tod$r_date[30])
+
+ggplot()+
+  geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 2.7e5, fill = D_N))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey90"))+
+  geom_line(data = iop2_visclust, aes(x = r_date, y = plot_vol_clust, color = cluster.f))+
+  geom_line(data = ams_56, aes(x = r_date, y = PMF_factor.amt*2e4, color = PMF_factor))+
+  ggtitle("Monoterpene Oxidation Product Clusters")+
+  ylab("Normalized Concentration")+
+  xlim(IOP2_filtertimes_tod$r_date[100], IOP2_filtertimes_tod$r_date[130])
+  
+```
+
+
+
+
+```{r}
+iop1_terp_clust_exp <- manual_ass_iop1_all %>% 
+  left_join(clusterCut1) %>% 
+  filter(!is.na(Cluster)) %>% 
+  group_by(Cluster) %>% 
+  summarise(BB1 = mean(BB1), AMS1_PMF_1r2= mean(AMS1_PMF_1r2), AMS1_PMF_2r2= mean(AMS1_PMF_2r2), AMS1_PMF_3r2= mean(AMS1_PMF_3r2), AMS1_PMF_4r2= mean(AMS1_PMF_4r2), AMS1_PMF_5r2= mean(AMS1_PMF_5r2), AMS1_PMF_6r2= mean(AMS1_PMF_6r2))
+
+iop2_terp_clust_exp <- manual_ass_iop2_all %>% 
+  left_join(clusterCut2) %>% 
+  filter(!is.na(Cluster)) %>% 
+  group_by(Cluster) %>% 
+  summarise(BB1 = mean(BB1), AMS2_PMF_1r2= mean(AMS2_PMF_1r2), AMS2_PMF_2r2= mean(AMS2_PMF_2r2), AMS2_PMF_3r2= mean(AMS2_PMF_3r2), AMS2_PMF_4r2= mean(AMS2_PMF_4r2), AMS2_PMF_5r2= mean(AMS2_PMF_5r2), AMS2_PMF_6r2= mean(AMS2_PMF_6r2))
+
+
+
+```
+Anthropogenics tracing
+
+```{r}
+
+just_a1 <- M_t_analyte_unique_IS_na1 %>% 
+  filter(IOP== 1) %>% 
+  filter(Compound.Name == "1221_0832_blob_100") %>% 
+  left_join(bt_sum_iop1_tj, by = "r_date") %>% 
+  mutate(r_date.f = as.factor(r_date))
+
+# just_a1 <- fulldates_iop1 %>% 
+#   dplyr::select(r_date) %>% 
+#   mutate(r_date.f = as.factor(r_date)) %>%
+#   dplyr::select(-r_date) %>% 
+#   left_join(just_a1, by = "r_date.f") %>% 
+#   mutate(Compound.Name = "1221_0832_blob_100") %>% 
+#   mutate(r_date = as.Date.POSIXct(r_date.f))
+
+just_a2 <- M_t_analyte_unique_IS %>% 
+  filter(IOP== 2) %>% 
+  filter(Compound.Name == "1221_0832_blob_100") %>% 
+  left_join(bt_sum_iop2_tj, by = "r_date") %>% 
+  mutate(T_O_D = T_O_D.x) %>% 
+  left_join(T_O_D_col)
+
+just_a1 %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y = 450, fill = BackTrajectory_Category.y))+
+  scale_fill_manual("", values = c("Baseline" = "grey70","Polluted" = "grey50"))+
+  geom_line(aes(x = r_date, y = vol_is_normnorm_ptnorm))
+
+just_a2 %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y = 20000, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Event" = "grey70", "Urban" = "grey50"))+
+  geom_line(aes(x = r_date, y = Volume))
+
+just_a2 %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y = 20000, fill = D_N))+
+  scale_fill_manual("", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  geom_line(aes(x = r_date, y = Volume))
+
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+#NOy_full <- read.delim("GoAmazon_MAOS_NOy_forEB.txt")
+
+#write.csv( NOy_full, "GoAnoy.csv")
+
+NOy_full <- read_csv("GoAnoy.csv") %>% 
+   mutate(nc_noy = replace(nc_noy, nc_noy ==-9999, NA))
+
+IOP2_noy_filtertimes <- bt_sum_iop2 %>% 
+  dplyr::select(File_num, AMZ_date, Date_num, r_date, T_O_D) 
+
+IOP2_noy_filtertimes <- IOP2_noy_filtertimes %>% 
+  mutate(NOy = NA)
+
+
+# note should go back and determine if AUC needed or just average
+for(i in 1:nrow(IOP2_noy_filtertimes)){
+  
+  
+  t_start = IOP2_noy_filtertimes$Date_num[i]
+  # note: the .16 is because of the sample times, must customize to own sample period or have both start and stop times in data
+  t_end = t_start + .16
+  
+  temp_noy_iop2 <- NOy_full %>% 
+    filter(time_num >= t_start) %>% 
+    filter(time_num < t_end)
+  
+  if(nrow(temp_noy_iop2) == 0){
+    next
+  }
+  
+  IOP2_noy_filtertimes$NOy[i] <- mean(temp_noy_iop2$nc_noy, na.rm = TRUE)
+  
+}
+
+
+
+IOP2_noy_filtertimes <- IOP2_noy_filtertimes %>% 
+  left_join(T_O_D_col)
+
+IOP2_noy_filtertimes %>% 
+  ggplot(aes(x = r_date, y = NOy, color = T_O_D))+
+  geom_point()+
+  ylim(0, 25)
+
+IOP2_noy_filtertimes %>% 
+  mutate(T_O_D_temp = 25) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y = T_O_D_temp, fill = as.factor(D_N)))+
+  scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  geom_line(aes(x = r_date, y = NOy))+
+  ylim(0, 25)
+
+IOP1_noy_filtertimes <- bt_sum_iop1 %>% 
+  dplyr::select(File_num, AMZ_date, Date_num, r_date, T_O_D) 
+
+IOP1_noy_filtertimes <- IOP1_noy_filtertimes %>% 
+  mutate(NOy = NA)
+
+
+# note should go back and determine if AUC needed or just average
+for(i in 1:nrow(IOP1_noy_filtertimes)){
+  
+  
+  t_start = IOP1_noy_filtertimes$Date_num[i]
+  # note: the .16 is because of the sample times, must customize to own sample period or have both start and stop times in data
+  t_end = t_start + .5
+  
+  temp_noy_iop1 <- NOy_full %>% 
+    filter(time_num >= t_start) %>% 
+    filter(time_num < t_end)
+  
+  if(nrow(temp_noy_iop1) == 0){
+    next
+  }
+  
+  IOP1_noy_filtertimes$NOy[i] <- mean(temp_noy_iop1$nc_noy, na.rm = TRUE)
+  
+}
+
+
+IOP1_noy_filtertimes %>% ggplot(aes(x = r_date, y = NOy, color = T_O_D))+
+  geom_point()+
+  ylim(0, 25)
+
+IOP1_noy_filtertimes %>% ggplot(aes(x = r_date, y = NOy))+
+  geom_line()+
+  ylim(0, 25)
+
+
+
+
+
+
+```
+
+
+```{r}
+continuous_IOP1 <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  left_join(IOP1_compfreq) %>% 
+  filter(pct_occur > .4)
+
+all_cor_iop1 <- continuous_IOP1 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+allcor1 <- data.frame(cor(all_cor_iop1, use ="pairwise.complete.obs"))
+
+dissimilarity = 1 - allcor1
+distance = as.dist(dissimilarity)
+clus <- hclust(distance)
+op_k <- kgs(clus, distance, maxclus = 20)
+plot (names (op_k), op_k, xlab="# clusters", ylab="penalty")
+
+plot(clus)
+
+
+mds.coor <- cmdscale(distance)
+plot(mds.coor[,1], mds.coor[,2], type="n", xlab="", ylab="")
+text(jitter(mds.coor[,1]), jitter(mds.coor[,2]),
+     rownames(mds.coor), cex=0.8)
+abline(h=0,v=0,col="gray75")
+
+#install.packages("factoextra")
+#library(factoextra)
+
+fviz_dend(clus, rect = TRUE)
+
+clusterCutall1 <- data.frame(cutree(clus, 5)) %>% 
+  tibble::rownames_to_column("Compound.Name")
+
+names(clusterCutall1)[2] <- "Cluster"
+
+clustered_iop1 <- manual_ass_iop1_all %>% 
+  left_join(clusterCutall1) %>% 
+  filter(!is.na(Cluster))
+
+table(clustered_iop1$Cluster, clustered_iop1$man_cat1)
+
+table(clustered_iop2$Cluster, clustered_iop2$man_cat2)
+
+clusterlabs_iop1 <- data.frame(Cluster = c(1,2,3,4,5), Cluster.lab = c("Unknown", "IsopOx1", "BB", "TerpOx", "IsopOx2"))
+
+
+
+clustered_iop1.pie <- clustered_iop1 %>% 
+  left_join(clusterlabs_iop1) %>% 
+  mutate(count_tic = 1) %>% 
+  group_by(Cluster.lab) %>% 
+  summarise(cumvol = sum(cumsum_ISnormnorm), cumnum = sum(count_tic))
+
+pie(clustered_iop1.pie$cumnum, labels = clustered_iop1.pie$Cluster.lab, main="Wet Season Number of Species per Cluster")
+
+pie(clustered_iop1.pie$cumvol, labels = clustered_iop1.pie$Cluster.lab, main="Wet Season Signal per Cluster")
+
+
+clusterlabs_iop2 <- data.frame(Cluster = c(1,2,3,4,5), Cluster.lab = c("IsopOx1", "BB", "TerpOx", "IsopOx2", "Unknown"))
+
+clustered_iop2.pie <- clustered_iop2 %>% 
+  left_join(clusterlabs_iop2) %>% 
+  mutate(count_tic = 1) %>% 
+  group_by(Cluster.lab) %>% 
+  summarise(cumvol = sum(cumsum_ISnormnorm), cumnum = sum(count_tic))
+
+pie(clustered_iop2.pie$cumnum, labels = clustered_iop2.pie$Cluster.lab, main="Dry Season Number of Species per Cluster")
+
+pie(clustered_iop2.pie$cumvol, labels = clustered_iop2.pie$Cluster.lab, main="Dry Season Signal per Cluster")
+
+analyte_cumsum1.1 <- analyte_cumsum1 %>% 
+  mutate(percentile = ISrawnorm_cumsum/max(ISrawnorm_cumsum))
+
+
+
+clustered_iop1.dist <- clustered_iop1 %>% 
+  left_join(clusterlabs_iop1) %>% 
+  left_join(analyte_cumsum1.1, by = "Compound.Name") %>% 
+  mutate(percentile.r = 10*ceiling(10*percentile)) %>% 
+  mutate(tic = 1) %>% 
+  group_by(percentile.r, Cluster.lab) %>% 
+  summarise(Compound.count = sum(tic)) %>% 
+  mutate(percentile.f = as.factor(percentile.r))
+
+clustered_iop1.dist %>% ggplot(aes(x = percentile.f, y = Compound.count, fill = Cluster.lab))+
+  geom_col(stat = "identity", position = "fill")+
+  ggtitle("Wet Season Compound Cluster Distribution")
+
+analyte_cumsum2.2 <- analyte_cumsum2 %>% 
+  mutate(percentile = ISrawnorm_cumsum/max(ISrawnorm_cumsum))
+
+
+
+clustered_iop2.dist <- clustered_iop2 %>% 
+  left_join(clusterlabs_iop2) %>% 
+  left_join(analyte_cumsum2.2, by = "Compound.Name") %>% 
+  mutate(percentile.r = 10*ceiling(10*percentile)) %>% 
+  mutate(tic = 1) %>% 
+  group_by(percentile.r, Cluster.lab) %>% 
+  summarise(Compound.count = sum(tic)) %>% 
+  mutate(percentile.f = as.factor(percentile.r))
+
+clustered_iop2.dist %>% ggplot(aes(x = percentile.f, y = Compound.count, fill = Cluster.lab))+
+  geom_col(stat = "identity", position = "fill")+
+  ggtitle("Dry Season Compound Cluster Distribution")
+
+
+
+clustered_tod_iop1 <- M_t_analyte_unique_IS %>% 
+  filter(IOP ==1) %>% 
+  left_join(clustered_iop1, by = "Compound.Name") %>% 
+  filter(!is.na(Cluster)) %>% 
+  mutate(plot_vol = vol_is_normnorm_ptnorm/cumsum_ISnormnorm) %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(T_O_D = T_O_D, vol = mean(plot_vol)) %>% 
+  distinct()%>% 
+  mutate(Cluster.f = as.factor(Cluster)) %>% 
+  left_join(clusterlabs_iop1)
+
+clustered_tod_iop1 %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol, color = Cluster.lab))
+
+ggplot()+
+  geom_col(data = bt_sum_iop1_tj, aes(x = r_date, y = 120000, fill = BackTrajectory_Category))+
+  scale_fill_manual("", values = c("Baseline" = "gray70", "Polluted" = "gray40"))+
+  geom_line(data = clustered_tod_iop1, aes(x = r_date, y = vol, color = Cluster.lab))
+
+
+
+
+```
+Exploring what the clusters are
+```{r}
+just_ams1 <- IOP1_filtertimes %>% 
+  dplyr::select(r_date, AMS_PMF_1:AMS_PMF_6)
+
+
+cluster_ams_cor_iop1 <- clustered_tod_iop1 %>% 
+  dplyr::select(r_date, Cluster, vol) %>% 
+  spread(Cluster, vol) %>% 
+  left_join(just_ams1, by = "r_date") 
+
+cor_ams_cluster_iop1 <- data.frame(cor(cluster_ams_cor_iop1[,-1], use ="pairwise.complete.obs"))
+
+table(clustered_iop1$Cluster, clustered_iop1$man_cat1)
+
+
+```
+
+```{r}
+
+continuous_IOP2 <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  left_join(IOP2_compfreq) %>% 
+  filter(pct_occur > .4)
+
+all_cor_iop2 <- continuous_IOP2 %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  dplyr::select(-r_date)
+
+allcor2 <- data.frame(cor(all_cor_iop2, use ="pairwise.complete.obs"))
+
+dissimilarity = 1 - allcor2
+distance = as.dist(dissimilarity)
+clus <- hclust(distance)
+op_k <- kgs(clus, distance, maxclus = 20)
+plot (names (op_k), op_k, xlab="# clusters", ylab="penalty")
+
+plot(clus)
+
+
+mds.coor <- cmdscale(distance)
+plot(mds.coor[,1], mds.coor[,2], type="n", xlab="", ylab="")
+text(jitter(mds.coor[,1]), jitter(mds.coor[,2]),
+     rownames(mds.coor), cex=0.8)
+abline(h=0,v=0,col="gray75")
+
+#install.packages("factoextra")
+#library(factoextra)
+
+fviz_dend(clus, rect = TRUE)
+
+clusterCutall2 <- data.frame(cutree(clus, 5)) %>% 
+  tibble::rownames_to_column("Compound.Name")
+
+names(clusterCutall2)[2] <- "Cluster"
+
+clustered_iop2 <- manual_ass_iop2_all %>% 
+  left_join(clusterCutall2) %>% 
+  filter(!is.na(Cluster)) 
+
+table(clustered_iop2$Cluster, clustered_iop2$man_cat2)
+
+clustered_tod_iop2 <- M_t_analyte_unique_IS %>% 
+  filter(IOP ==2) %>% 
+  left_join(clustered_iop2, by = "Compound.Name") %>% 
+  filter(!is.na(Cluster)) %>% 
+  mutate(plot_vol = vol_is_normnorm_ptnorm/cumsum_ISnormnorm) %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(T_O_D = T_O_D, vol = mean(plot_vol), vol_r = mean(vol_is_rawnorm_ptnorm)) %>% 
+  distinct()%>% 
+  mutate(Cluster.f = as.factor(Cluster)) %>% 
+  left_join(clusterlabs_iop2)
+
+clustered_tod_iop2 %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol, color = Cluster.lab))
+
+clustered_tod_iop2 %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol_r, color = Cluster.lab))
+
+clustered_tod_iop2.wobb <- clustered_tod_iop2 %>% 
+  filter(Cluster.lab != "BB")
+
+clustered_tod_iop2.wobb %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol_r, color = Cluster.lab))
+
+
+
+```
+exploring what clusters are
+```{r}
+
+just_ams2 <- IOP2_filtertimes %>% 
+  dplyr::select(r_date, AMS_PMF_1:AMS_PMF_6)
+
+
+cluster_ams_cor_iop2 <- clustered_tod_iop2 %>% 
+  dplyr::select(r_date, Cluster, vol) %>% 
+  spread(Cluster, vol) %>% 
+  left_join(just_ams2, by = "r_date") 
+
+cor_ams_cluster_iop2 <- data.frame(cor(cluster_ams_cor_iop2[,-1], use ="pairwise.complete.obs"))
+
+
+```
+
+
+partitioning the BB cluster, IOP2
+```{r}
+only_bb_iop2 <- M_t_analyte_unique_IS %>% 
+  filter(IOP ==2) %>% 
+  left_join(clustered_iop2, by = "Compound.Name") %>% 
+  filter(Cluster == 2) %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm)
+
+only_bb_iop2.cor <- data.frame(cor(only_bb_iop2[,-1], use = "pairwise.complete.obs"))
+
+dissimilarity = 1 - only_bb_iop2.cor
+distance = as.dist(dissimilarity)
+clus <- hclust(distance)
+op_k <- kgs(clus, distance, maxclus = 20)
+plot (names (op_k), op_k, xlab="# clusters", ylab="penalty")
+
+plot(clus)
+
+clusterCut_bb2 <- data.frame(cutree(clus, 5)) %>% 
+  tibble::rownames_to_column("Compound.Name")
+
+names(clusterCut_bb2)[2] <- "Cluster"
+
+clustered_bb_iop2 <- manual_ass_iop2_all %>% 
+  left_join(clusterCut_bb2) %>% 
+  filter(!is.na(Cluster)) 
+
+table(clustered_bb_iop2$Cluster, clustered_bb_iop2$man_cat2)
+
+clustered_bb_iop2.l <- M_t_analyte_unique_IS %>% 
+  filter(IOP ==2) %>% 
+  left_join(clustered_bb_iop2, by = "Compound.Name") %>% 
+  filter(!is.na(Cluster)) %>% 
+  mutate(plot_vol = vol_is_normnorm_ptnorm/cumsum_ISnormnorm) %>% 
+  group_by(Cluster, r_date) %>% 
+  summarise(T_O_D = T_O_D, vol = mean(plot_vol), vol_r = mean(vol_is_rawnorm_ptnorm)) %>% 
+  distinct()%>% 
+  mutate(Cluster.f = as.factor(Cluster))
+
+clustered_bb_iop2.l %>% ggplot()+
+  geom_line(aes(x = r_date, y = vol, color = Cluster.f))
+
+
+```
+
+Exploring what is driving the uniqueness boost
+
+```{r}
+unique_tracing_c1 <- unique_tracing_c %>% 
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, unique.analyte, is_unique_prior, unique_log, unique_vol) %>% 
+  left_join(M_t_analyte_unique_IS, by = c("Compound.Name", "r_date")) %>% 
+  mutate(unique_vol_norm = unique_log*vol_is_rawnorm_ptnorm) %>% 
+  left_join(manual_ass_iop1_all, by = "Compound.Name")
+
+unique_tracing_c2 <- unique_tracing_c %>% 
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, unique.analyte, is_unique_prior, unique_log, unique_vol) %>% 
+  left_join(M_t_analyte_unique_IS, by = c("Compound.Name", "r_date")) %>% 
+  mutate(unique_vol_norm = unique_log*vol_is_rawnorm_ptnorm) %>% 
+  left_join(manual_ass_iop2_all, by = "Compound.Name")
+
+
+p1 <- ggplot()+
+  geom_col(data = unique_tracing_c1, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))
+
+p2 <- ggplot()+
+  geom_col(data = unique_tracing_c2, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
+  ylim(0, 15)
+
+cols <- c("Urban Plume Tracer \n (not to scale)" = "black", "Biomass\n Burning Tracer"= "green")
+
+testbb1 <- unique_tracing_c1 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+p3 <- ggplot()+
+  geom_col(data = unique_tracing_c1, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
+  labs(fill = "Unique Compared \n To Prior Sample")+
+  geom_line(data = just_a1, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20, colour = "Urban Plume Tracer \n (not to scale)"))+
+  geom_line(data = testbb1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer"))+
+  labs(color = "")+
+  scale_color_manual(values = cols)+
+  xlab("Date")+
+  ylab("Internal Standard Normalized Signal")+
+  ggtitle("Drivers of Wet Season Compositional Variability")+
+  
+  scale_fill_discrete(name="Common\nCompared\nto Prior Sample",
+                         labels=c("Common", "Unique"))+
+  theme_bw()+
+  theme(legend.position="bottom")+
+  guides(col = guide_legend(order = 2),fill = guide_legend(order = 1))+
+  xlim(unique_tracing_c1.m$r_date[25], unique_tracing_c1.m$r_date[54])
+
+p3
+
+p4 <- ggplot()+
+  geom_col(data = unique_tracing_c2, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
+  labs(fill = "Unique Compared \n To Prior Sample")+
+  geom_line(data = just_a2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*40, colour = "Urban Plume Tracer"))+
+  labs(color = "")+
+  scale_color_manual(values = cols)+
+  ylab("Internal Standard Normalized Signal")+
+  ggtitle("Drivers of Dry Season Compositional Variability")+
+  ylim(0, 15)
+
+p4
+
+just_bb1 <- M_t_analyte_unique_IS_na1 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+just_bb2 <- M_t_analyte_unique_IS_na2 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+test <- unique_tracing_c2 %>% 
+  group_by(r_date) %>% 
+  summarise(tot_normvol = sum(vol_is_rawnorm_ptnorm, na.rm = TRUE))
+
+test %>% ggplot(aes(x = r_date, y = tot_normvol))+
+  geom_point()
+
+testbb2 <- unique_tracing_c2 %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+p5 <- ggplot()+
+  geom_col(data = unique_tracing_c2, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
+  labs(fill = "Unique Compared \n To Prior Sample")+
+  geom_line(data = just_a2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*40, colour = "Urban Plume Tracer \n (not to scale)"))+
+  geom_line(data = testbb2, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer"))+
+  labs(color = "")+
+  scale_color_manual(values = cols)+
+  ggtitle("Drivers of Dry Season Compositional Variability")+
+  xlab("Date")+
+  ylab("Internal Standard Normalized Signal")+
+  ggtitle("Drivers of Dry Season Compositional Variability")+
+  scale_fill_discrete(name="Common\nCompared\nto Prior Sample",
+                         labels=c("Common", "Unique"))+
+  theme_bw()+
+  theme(legend.position="bottom")+
+  guides(col = guide_legend(order = 2),fill = guide_legend(order = 1))+
+  ylim(0, 15)+
+  xlim(unique_tracing_c2.m$r_date[31],unique_tracing_c2.m$r_date[108])
+
+p5
+
+just_a1.m <- just_a1_na %>% 
+  mutate(a1.vol_is_rawnorm_ptnorm = vol_is_rawnorm_ptnorm) %>% 
+  dplyr::select(r_date, a1.vol_is_rawnorm_ptnorm)
+
+just_bb1.m <- just_bb_na1 %>% 
+  mutate(bb1.vol_is_rawnorm_ptnorm = vol_is_rawnorm_ptnorm) %>% 
+  dplyr::select(r_date, bb1.vol_is_rawnorm_ptnorm)
+
+unique_tracing_c1.m <- unique_tracing_c1 %>% 
+  group_by(r_date, unique_log) %>% 
+  summarise(vol_forspread = sum(vol_is_rawnorm_ptnorm, na.rm = TRUE)) %>% 
+  spread(unique_log, vol_forspread) %>% 
+  left_join(just_a1.m) %>% 
+  left_join(just_bb1.m)
+
+names(unique_tracing_c1.m) <- make.names(names(unique_tracing_c1.m), unique = TRUE)
+
+just_a2.m <- just_a2_na %>% 
+  mutate(a2.vol_is_rawnorm_ptnorm = vol_is_rawnorm_ptnorm) %>% 
+  dplyr::select(r_date, a2.vol_is_rawnorm_ptnorm)
+
+just_bb2.m <- just_bb_na2 %>% 
+  mutate(bb2.vol_is_rawnorm_ptnorm = vol_is_rawnorm_ptnorm) %>% 
+  dplyr::select(r_date, bb2.vol_is_rawnorm_ptnorm)
+
+unique_tracing_c2.m <- unique_tracing_c2 %>% 
+  group_by(r_date, unique_log) %>% 
+  summarise(vol_forspread = sum(vol_is_rawnorm_ptnorm, na.rm = TRUE)) %>%
+  spread(unique_log, vol_forspread) %>% 
+  left_join(just_a2.m) %>% 
+  left_join(just_bb2.m)
+
+names(unique_tracing_c2.m) <- make.names(names(unique_tracing_c2.m), unique = TRUE)
+
+p6 <- unique_tracing_c1.m %>% 
+  #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
+  ggplot()+
+  geom_point(aes(x = a1.vol_is_rawnorm_ptnorm, y = TRUE.), color = "blue", size = 2, shape = 17)+
+  xlab("Internal Standard Normalized \nUrban Plume Tracer")+
+  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
+  annotate("text", x = .01, y = 1.5, label = "Urban Tracer \nr = .845", size = 7)+
+  theme_bw()+
+  theme(text = element_text(size = 18))
+
+p6
+
+p10 <- unique_tracing_c1.m %>% 
+  #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
+  ggplot()+
+  geom_point(aes(x = bb1.vol_is_rawnorm_ptnorm, y = TRUE.), color = "black", fill = "green", size = 2, shape = 24)+
+  xlab("Internal Standard Normalized \nBiomass Burning Tracer")+
+  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
+  annotate("text", x = .2, y = 1.5, label = "Biomass Burning Tracer \nr = .344", size = 7)+
+  theme_bw()+
+  theme(text = element_text(size = 18))
+
+p10
+
+cor(unique_tracing_c1.m$a1.vol_is_rawnorm_ptnorm, unique_tracing_c1.m$TRUE.)
+cor(unique_tracing_c1.m$bb1.vol_is_rawnorm_ptnorm, unique_tracing_c1.m$TRUE.)
+
+unique_tracing_c2.m %>% 
+  #filter(a2.vol_is_rawnorm_ptnorm >0) %>% 
+  left_join(IOP2_filtertimes_tod, by = "r_date") %>% 
+  ggplot()+
+  geom_point(aes(x = a2.vol_is_rawnorm_ptnorm, y = TRUE., color = D_N))+
+  ylim(0,2)
+
+p8 <- unique_tracing_c2.m %>% 
+  #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
+  ggplot()+
+  geom_point(aes(x = a2.vol_is_rawnorm_ptnorm, y = TRUE.), color = "blue", size = 2, shape = 17)+
+  xlab("Internal Standard Normalized \nUrban Plume Tracer")+
+  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
+  annotate("text", x = 300, y = 4, label = "Urban Tracer \nr = .093", size = 7)+
+  theme_bw()+
+  theme(text = element_text(size = 18))
+
+p8
+
+p9 <- unique_tracing_c2.m %>% 
+  #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
+  ggplot()+
+  geom_point(aes(x = bb2.vol_is_rawnorm_ptnorm, y = TRUE.), color = "black", fill = "green", size = 2, shape = 24)+
+  xlab("Internal Standard Normalized \nBiomass Burning Plume Tracer")+
+  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
+  annotate("text", x = 75000, y = 4, label = "Biomass Burning \nTracer r = .693", size = 7)+
+  theme_bw()+
+  theme(text = element_text(size = 18))
+
+p9
+
+unique_tracing_c2.m %>% 
+  #filter(a2.vol_is_rawnorm_ptnorm >0) %>% 
+  left_join(IOP2_filtertimes_tod, by = "r_date") %>% 
+  filter(D_N == "D") %>% 
+  ggplot()+
+  geom_point(aes(x = a2.vol_is_rawnorm_ptnorm, y = TRUE., color = D_N))+
+  ylim(0,2)
+
+unique_tracing_c2.m %>% 
+  #filter(bb2.vol_is_rawnorm_ptnorm >0) %>% 
+  left_join(IOP2_filtertimes_tod, by = "r_date") %>% 
+  ggplot()+
+  geom_point(aes(x = bb2.vol_is_rawnorm_ptnorm, y = TRUE., color = D_N))+
+  ylim(0,2)
+
+cor(unique_tracing_c2.m$a2.vol_is_rawnorm_ptnorm, unique_tracing_c2.m$TRUE.)
+cor(unique_tracing_c2.m$bb2.vol_is_rawnorm_ptnorm, unique_tracing_c2.m$TRUE.)
+
+p7 <- unique_tracing_c2.m %>% 
+  left_join(IOP2_filtertimes_tod, by = "r_date") %>% 
+  #filter(bb2.vol_is_rawnorm_ptnorm >0) %>% 
+  ggplot()+
+  geom_point(aes(x = bb2.vol_is_rawnorm_ptnorm, size = sqrt(TRUE.), y = a2.vol_is_rawnorm_ptnorm, color = D_N))
+
+p7
+
+# unique_tracing_c %>% 
+#   filter(IOP == 2) %>% 
+#   mutate(ones = 1) %>% 
+#   ggplot(aes(fill = unique_log, y = , x = r_date))+
+#   geom_bar(position = "stack", stat = "identity")+
+#   ylab("Analyte Raw Volume")+
+#   xlab("Dry Season GoAmazon Date")+
+#   scale_fill_manual(name = "Unique Compared\n to Previous Sample", values=c("blue", "green"))
+
+
+
+```
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
