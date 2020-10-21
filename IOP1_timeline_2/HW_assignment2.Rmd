@@ -1,0 +1,431 @@
+---
+title: "ESPM 174A - Homework assignment 2"
+author: "Your name"
+date: "Your date"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r libs, message = FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+library(lubridate)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+library(plot.matrix)
+
+#install.packages("EnvStats")
+library(EnvStats)
+#install.packages("installr")
+#library(installr)
+
+
+```
+
+
+### Instructions
+Work on the exercise below, due September 23 (before midnight) on bCourses. Please write **short answers (<100 words)**  in "your text here", as well as the R code you used to get there (in "your code here").
+
+### Exercise
+1) Please upload a sample of the data (.csv file) you plan to analyze for your final project. You can (but do not need to) upload the whole dataset. However, the closer the resemblance of this data set to the one you will end up analyzing, the better. E.g., if your question is at the community level, then include several species; if you would like to compare a particular physical variable across different sites, then include several sites. The goal is for you to start getting familiar with your data and its level of complexity. In the code below, import your data set in R, and examine the following properties: (1) length and frequency of the time series (whether it is one, or multiple time series); (2) completeness of each time series; (3) basic descriptive statistics for each time series (at least mean, CV, ACF for each variable; plus anything else you would like to add). [3 points total]
+```{r timeline_testing, warning = FALSE, echo = FALSE, message = FALSE}
+
+bt_sum_iop1 <- read_csv("Blob_table_summary_JustSample_datefixed.csv") %>% 
+  filter(IOP == 1)
+
+date <- bt_sum_iop1$File_num[10]
+
+rundatet <- gsub("GCxGC_","",date)
+
+rundate <- as.Date(rundatet, "%Y%m%d")
+
+bt_sum_iop2 <- read_csv("Blob_table_summary_JustSample_datefixed.csv") %>% 
+  filter(IOP == 2)
+
+date <- bt_sum_iop2$File_num[10]
+
+rundatet <- paste("2018", date, sep = "")
+
+rundate <- as.Date(rundatet, "%Y%m%d")
+
+#adding a date column that R will recognize
+bt_sum_iop1 <- bt_sum_iop1 %>% mutate(r_date =    mdy_hm(AMZ_date)) %>% 
+  mutate(run_date = as.Date(gsub("GCxGC_","",File_num), "%Y%m%d"))
+
+bt_sum_iop2 <- bt_sum_iop2 %>% mutate(r_date =    mdy_hm(AMZ_date)) %>% 
+  mutate(run_date = as.Date(paste("2018", File_num, sep = ""), "%Y%m%d"))
+
+#bt_sum_IOP1 <- bt_sum %>% 
+#  filter(IOP == 1)
+
+# making a function that will make the correct file names from the table of samples so that my actual sample files can be read in
+make_file_name <- function(date_string) {
+  file_start <- "IOP1_blobtables_2/"
+  file_end <- ".csv"
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
+make_file_name_iop2 <- function(date_string) {
+  file_start <- "IOP2_blobtables/"
+  file_end <- ".csv"
+  full_name <- paste(file_start,date_string,file_end, sep = "")
+  return(full_name)
+  
+}
+
+# function to read in files 
+read_bt_files <- function(fi_name_short) {
+  
+  fi_name <- make_file_name(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+read_bt_files_iop2 <- function(fi_name_short) {
+  
+  fi_name <- make_file_name_iop2(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(File_num = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+#reading in all of the blob tables and turning them into one big blob table- creating a long table
+make_massive_table <- function(summary_table){
+ 
+  M <- read_bt_files(as.character(summary_table$File_num[1]))
+
+  for(i in 2:length(summary_table$File_num)){
+    t <- read_bt_files(as.character(summary_table$File_num[i]))
+    Mnew <- rbind(M, t)
+    M <- Mnew
+    print(i)
+  }
+  M_t <<- M
+}
+
+make_massive_table_iop2 <- function(summary_table){
+ 
+  M2 <- read_bt_files_iop2(as.character(summary_table$File_num[1]))
+
+  for(i in 2:length(summary_table$File_num)){
+    t <- read_bt_files_iop2(as.character(summary_table$File_num[i]))
+    Mnew <- rbind(M2, t)
+    M2 <- Mnew
+    print(i)
+  }
+  M_t2 <<- M2
+}
+
+make_massive_table(bt_sum_iop1)
+
+make_massive_table_iop2(bt_sum_iop2)
+
+#adding in all information from the summary table
+M_t_iop1_full <- M_t %>% left_join(bt_sum_iop1)
+M_t_iop2_full <- M_t2 %>% left_join(bt_sum_iop2)
+
+M_t_full <- rbind(M_t_iop1_full, M_t_iop2_full)
+
+# tidying column names
+names(M_t_full) <- make.names(names(M_t_full),unique = TRUE)
+
+M_t_full <- M_t_full %>% 
+  mutate(Punch_norm_vol = Volume/Filter_punches) %>% 
+  mutate(Punch_time_norm_vol = Volume/(Punch_num_sample_time_norm))
+
+
+```
+
+
+```{r}
+# filtering out bad LRI matches
+Match_factor_floor <- 750
+Reverse_match_factor_floor <- 100
+LRI_diff_floor <- 6
+
+
+
+
+fb_match_factor_floor <- 600
+fb_reverse_match_factor_floor <- 100
+IS_lib_name <- "amzi0503_b"
+FB_lib_name <- "amz_fb_trimmed_esrem"
+
+rt2_floor <- .5 # note: check on this, but for purposes of indexing retention times in 2d this is important
+
+# creating a column of the differences in linear retention indecies so that poor matches can be screened out
+M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
+  mutate(LRI_diff = replace_na(LRI_diff, -999))
+
+# identifying the internal standard
+IS_goodmatch <- M_t_LRI %>% 
+  filter(Library.Name == IS_lib_name | Library.Name == "-") %>% 
+  filter(LRI_diff < LRI_diff_floor| Compound.Name == "4-methoxy-benzaldehyde") %>% 
+  filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "methoxyphenol-d3")  
+
+FB_goodmatch <- M_t_LRI %>% 
+  filter(Library.Name == FB_lib_name) %>% 
+  filter(LRI_diff < LRI_diff_floor) %>% 
+  filter(Library.Match.Factor > fb_match_factor_floor)
+
+FB_okmatch <- M_t_LRI %>% 
+  filter(Library.Name == FB_lib_name) %>% 
+  filter(Library.Match.Factor> fb_match_factor_floor-100) %>% 
+  anti_join(FB_goodmatch)
+  
+IS_okmatch <- M_t_LRI %>% 
+  filter(Library.Name == IS_lib_name | Library.Name == "-") %>%
+  filter(Library.Match.Factor > Match_factor_floor-100 | Compound.Name == "methoxyphenol-d3")  %>% 
+  anti_join(IS_goodmatch)
+
+small_poorlymatched <- M_t_LRI %>% 
+  filter(Compound.Name != "methoxyphenol-d3") %>% 
+  filter(Library.Match.Factor < Match_factor_floor) %>% 
+  filter(Volume < 200)
+
+M_t_all_analytes <- M_t_LRI %>% 
+  anti_join(FB_goodmatch) %>% 
+  anti_join(IS_goodmatch) %>% 
+  anti_join(FB_okmatch) %>% 
+  anti_join(IS_okmatch) %>% 
+  anti_join(small_poorlymatched) %>% 
+  filter(LRI.I > 1300) 
+
+  
+M_t_analyte_unique <- M_t_all_analytes %>% 
+  filter(Library.Name != IS_lib_name) %>% 
+  filter(Library.Name != FB_lib_name) %>% 
+  filter(LRI_diff < LRI_diff_floor) %>% 
+  filter(Library.Match.Factor > Match_factor_floor | Description == "match") %>% 
+  #filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
+  arrange(desc(Volume)) %>% 
+  arrange(Compound.Name) %>% 
+  arrange(r_date) %>% 
+  distinct(Compound.Name, r_date, .keep_all = TRUE)
+
+```
+
+
+```{r}
+fulldates_iop1 <- read_csv("Blob_table_summary_fulldates_iop1.csv") %>% 
+  dplyr::select(AMZ_date, date_num) %>% 
+  mutate(r_date =   convertToDateTime(date_num)) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  filter(!is.na(r_date))
+
+fulldates_iop2 <- read_csv("Blob_table_summary_fulldates_iop2.csv") %>% 
+  dplyr::select(AMZ_date, date_num) %>% 
+  mutate(r_date =  mdy_hm(AMZ_date)) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  filter(!is.na(r_date))
+
+fulldates <- rbind(fulldates_iop1, fulldates_iop2)
+
+# M_t_full_0filled <- M_t_analyte_unique_IS %>% 
+#   dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+#   spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>%
+#   gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date)
+
+# M_t_analyte_unique_IS_0filled.r <- M_t_analyte_unique_IS %>% 
+#   dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+#   spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>%
+#   gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_0filled1.w <- M_t_analyte_unique %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0)
+
+M_t_analyte_unique_0filled1.wr <- M_t_analyte_unique %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0)
+
+
+
+M_t_analyte_unique_0filled1r <- M_t_analyte_unique %>%
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0) %>%
+  gather(key = "Compound.Name", value = "Punch_time_norm_vol", -r_date)
+
+M_t_analyte_unique_0filled2.w <- M_t_analyte_unique %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0)
+
+
+M_t_analyte_unique_0filled2.wr <- M_t_analyte_unique %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0)
+
+
+M_t_analyte_unique_0filled2r <- M_t_analyte_unique %>%
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, Punch_time_norm_vol) %>% 
+  spread(Compound.Name, Punch_time_norm_vol, fill = 0) %>%
+  gather(key = "Compound.Name", value = "Punch_time_norm_vol", -r_date)
+
+just_1dates <- bt_sum_iop1 %>% 
+  mutate(in_sample = 1) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  dplyr::select(r_date.f, in_sample)
+
+dates_leftout1 <- fulldates_iop1 %>% 
+  left_join(just_1dates, by = "r_date.f") %>% 
+  filter(is.na(in_sample)) %>% 
+  left_join(M_t_analyte_unique_0filled1.w, by = "r_date") %>% 
+  dplyr::select(-r_date.f, -in_sample, -AMZ_date, -date_num)
+
+dates_leftout2 <- fulldates_iop2 %>% 
+  dplyr::select(r_date) %>% 
+  anti_join(bt_sum_iop2, by = "r_date") %>% 
+  left_join(M_t_analyte_unique_0filled2.w)
+
+# M_t_analyte_unique_formerge <- M_t_analyte_unique %>% 
+#   dplyr::select(-vol_is_normnorm_ptnorm, -Punch_time_norm_vol)
+
+M_t_analyte_unique_na1r <- rbind(M_t_analyte_unique_0filled1.wr, dates_leftout1) %>% 
+  gather(key = "Compound.Name", value = "Punch_time_norm_vol", -r_date)
+
+# M_t_analyte_unique_IS_na1 <- rbind(M_t_analyte_unique_IS_0filled1.w, dates_leftout1) %>% 
+#   gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>%
+#   left_join(M_t_analyte_unique_IS_na1r) %>% 
+#   left_join(analyte_cumsum1, by = "Compound.Name") %>% 
+#   left_join(bt_sum_iop1_tj, by = "r_date") %>% 
+#   left_join(IOP1_filtertimes, by = "r_date") %>% 
+#   left_join(Analyte_positions, by = "Compound.Name")
+
+M_t_analyte_unique_na2r <- rbind(M_t_analyte_unique_0filled2.w, dates_leftout2) %>% 
+  gather(key = "Compound.Name", value = "Punch_time_norm_vol", -r_date)
+
+# M_t_analyte_unique_IS_na2 <- rbind(M_t_analyte_unique_IS_0filled2.w, dates_leftout2) %>% 
+#   gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+#   left_join(M_t_analyte_unique_IS_na2r) %>% 
+#   left_join(analyte_cumsum2, by = "Compound.Name") %>% 
+#   left_join(bt_sum_iop2_tj, by = "r_date") %>% 
+#   left_join(IOP2_filtertimes, by = "r_date") %>% 
+#   left_join(Analyte_positions, by = "Compound.Name")
+
+M_t_analyte_unique_na1r.w <- rbind(M_t_analyte_unique_0filled1.w, dates_leftout1)
+names(M_t_analyte_unique_na1r.w) <- make.names(names(M_t_analyte_unique_na1r.w),unique = TRUE)
+
+M_t_analyte_unique_na2r.w <- rbind(M_t_analyte_unique_0filled2.w, dates_leftout2)
+
+names(M_t_analyte_unique_na2r.w) <- make.names(names(M_t_analyte_unique_na2r.w),unique = TRUE)
+
+```
+
+```{r}
+#Focusing on second time series for this homework
+
+M_t_analyte_unique_na2r.w <- M_t_analyte_unique_na2r.w %>% 
+  mutate(row.na = is.na(X1202_1412_blob_1))
+
+natab <- table(M_t_analyte_unique_na2r.w$row.na)
+natab
+
+pct.na <- (natab[2]/(natab[2]+natab[1]))*100
+pct.na
+
+min(M_t_analyte_unique_na2r.w$r_date)
+max(M_t_analyte_unique_na2r.w$r_date)
+
+M_t_analyte_unique_na2r.w$r_date[1]-M_t_analyte_unique_na2r.w$r_date[2]
+
+ncol(M_t_analyte_unique_na2r.w)-2
+
+```
+
+```{r}
+for(i in 3:20){
+  #i = 3
+  tseries_temp <- M_t_analyte_unique_na2r.w[,i] 
+  acf(tseries_temp, na.action = na.pass)
+  temp.mean = colMeans(tseries_temp, na.rm = TRUE)
+  colname.temp = colnames(M_t_analyte_unique_na2r.w[,i] )
+  
+  vec <- pull(M_t_analyte_unique_na2r.w, colname.temp)
+  
+  cv.temp = cv(vec, na.rm = TRUE)
+
+  
+  print(paste(colname.temp, " Mean: ",  temp.mean, " CV: ", cv.temp, sep = ""))
+  
+}
+
+# known biomass burning tracer
+
+acf(M_t_analyte_unique_na2r.w[,"X1202_1412_blob_1"], na.action = na.pass)
+
+temp.mean = mean(M_t_analyte_unique_na2r.w$X1202_1412_blob_1, na.rm = TRUE)
+  
+temp.colname = "X1202_1412_blob_1"
+
+vec <- pull(M_t_analyte_unique_na2r.w, colname.temp)
+
+cv.temp = cv(vec, na.rm = TRUE)
+  
+print(paste(colname.temp, " Mean: ",  temp.mean, " CV: ", cv.temp, sep = ""))
+
+
+
+```
+
+
+My dry season time series spans from September 8 2014 to October 11 2018.  The time interval is 4 hrs and I am tracing 919 individual compounds.  I am totally missing data for 35.8% of the days in the measurement period.  At all other times, if a given compound is not observed it is assumed to be present at below detection limit levels and its value is forced to zero. For the purposes of this analysis I have elected to examine the summary statistics of 11 compounds as reporting statistics for all 919 would be inefficient. 
+
+The acf of many of my time series are periodic and have significant lags at intervals of 6.  This makes sense for compounds that follow a diurnal pattern; as the samples are 4 hour time resolved, there are 6 in a day leading to a 6 point wavelength.
+
+For Levoglucosan, the mean is 22,263, cv is 4.14. and significant lags are at 1, 6, and multiples of 3 generally.
+
+### 2) Plot the data [1 point].
+```{r code chunk 2}
+
+M_t_analyte_unique_na2r.w %>% 
+  ggplot(aes(x = r_date, y = X1202_1412_blob_1))+
+  geom_line()+
+  ylab("Levoglucosan Blob Volume")+
+  xlab("GoAmazon Date")
+
+```
+Your text here (<100 words).
+
+### 3) What is your main research question? Do you have any working hypothesis? [1 point].
+
+Research Question: How does antrhopogenic pollution influence biogenic secondary organic aerosol formation?
+
+Hypothesis: Anthropogenic activities cause increases in NOx and ozone concentrations.  Increases in NOx perturb baseline oxidation chemistry causing different organic compounds to be formed, while the overall increase in oxidants leads to higher overall secondary organic aerosol yields from biogenic precursors.  In the wet season, urban activities are the most significant source of NOx and anthropogenic pollutants, while in the dry season human caused biomass burning is the most significant source of NOx and increased oxidants.   
+
+### Any notes (optional)
+If you need to add any additional text, please do so here (<100 words).
