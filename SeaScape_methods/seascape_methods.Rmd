@@ -7,22 +7,217 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r libs, message = FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+library(lubridate)
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+#install.packages("installr")
+#library(installr)
+
+#install.packages("viridis")  # Install
+library("viridis")   
+```
 ## R Markdown
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+```{r }
+rh_tab <- read_csv("head_of_flume_rh.csv") %>% 
+  filter(is.na(remove_cells))
+
+rh_tab_comp <- rh_tab %>% 
+  group_by(Timestamp) %>% 
+  summarise(Temp_C = mean(Temp_C), RH_percent = mean(RH_percent)) %>% 
+  mutate(Timestamp_r = mdy_hm(Timestamp)) %>% 
+  mutate(month = month(Timestamp_r), day = day(Timestamp_r), hour = hour(Timestamp_r)) %>% 
+  mutate(hour.f = as.factor(hour), date.f = date(Timestamp_r)) %>% 
+  filter(date.f > "2019-07-25") 
+
+rh_tab_comp_hr <- rh_tab %>% 
+  group_by(Timestamp) %>% 
+  summarise(Temp_C = mean(Temp_C), RH_percent = mean(RH_percent)) %>% 
+  mutate(Timestamp_r = mdy_hm(Timestamp)) %>% 
+  mutate(month = month(Timestamp_r), day = day(Timestamp_r), hour = hour(Timestamp_r)) %>% 
+  mutate(hour.f = as.factor(hour), date.f = date(Timestamp_r)) %>% 
+  group_by(date.f, hour.f) %>% 
+  summarise(Temp_C = mean(Temp_C), RH_percent = mean(RH_percent))
+
+
+summary(rh_tab_comp$Temp_C)
+sd(rh_tab_comp$Temp_C)
+summary(rh_tab_comp$RH_percent)
+sd(rh_tab_comp$RH_percent)
 ```
 
 ## Including Plots
 
 You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r pressure, fig.width=7, fig.height=3}
+p <- ggplot(rh_tab_comp, aes(x = 1, y=RH_percent)) + 
+  geom_violin(fill = "dodgerblue")+
+  #geom_boxplot(width=0.1)+
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Relative Humidity (%)")
+
+p
+
+pp <- ggplot(rh_tab_comp, aes(x = hour.f, y=RH_percent)) + 
+  geom_violin()+
+  #theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  geom_point(aes(x  = hour.f, y = RH_percent, color = date.f))+
+  ylab("Relative Humidity (%)")+
+  xlab("Hour")+
+  labs(color = "Date")+
+  scale_color_viridis(trans = "date")+
+  ggtitle("Diurnal Variability of Relative Humidity \nAcross SeaScape 2019")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+pp
+
+pp2 <- ggplot(rh_tab_comp, aes(x = hour.f, y=RH_percent)) + 
+  geom_boxplot()+
+  #theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Relative Humidity (%)")+
+  xlab("Hour")
+
+pp2
+
+ppp <- ggplot(rh_tab_comp_hr, aes(x = hour.f, y = RH_percent, color = date.f))+
+  geom_point()+
+  ylab("Relative Humidity (%)")+
+  xlab("Hour")
+ppp
+
+
+t <- ggplot(rh_tab_comp, aes(x = 1, y=Temp_C)) + 
+  geom_violin(fill = "green")+
+  geom_boxplot(width=0.1)+
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Flume Air Temperature (Degrees C)")
+
+t
+
+tt <- ggplot(rh_tab_comp, aes(x = hour.f, y=Temp_C)) + 
+  geom_boxplot()+
+  #theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Flume Air Temperature (Degrees C)")+
+  xlab("Hour")
+
+tt
+
+tt2 <- ggplot(rh_tab_comp, aes(x = hour.f, y=Temp_C)) + 
+  geom_violin()+
+  #theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  geom_point(aes(x  = hour.f, y = Temp_C, color = date.f))+
+  ylab("Air Temperature (*C)")+
+  xlab("Hour")+
+  labs(color = "Date")+
+  scale_color_viridis(trans = "date")+
+  ggtitle("Diurnal Variability of Flume Air Temperature \nAcross SeaScape 2019")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+tt2
+
+rh_tab_comp %>% 
+  ggplot(aes(x = Temp_C, y = RH_percent))+
+  geom_point()
+
+
 ```
+
+```{r, fig.width = 4, fig.height = 7}
+
+p <- ggplot(rh_tab_comp, aes(x = 1, y=RH_percent)) + 
+  geom_violin(fill = "dodgerblue")+
+  #geom_boxplot(width=0.1)+
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Relative Humidity (%)")+
+  scale_y_continuous(breaks=seq(70,100,5))
+
+p
+
+t <- ggplot(rh_tab_comp, aes(x = 1, y=Temp_C)) + 
+  geom_violin(fill = "green")+
+  #geom_boxplot(width=0.1)+
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())+
+  ylab("Flume Air Temperature (Degrees C)")+
+  scale_y_continuous(breaks=seq(21,31,1))
+
+t
+
+
+```
+### now doing mdom comparison
+```{r}
+mdom_post <- read_csv("mdom_0726_nist_Blob_Table.csv")
+names(mdom_post)<- make.names(names(mdom_post), unique = TRUE)
+
+anthro_labs <- data.frame(Group.Name = c("anthro", "I_anthro"), Group.labs = c("Pre-Existing", "Introduced"))
+
+mdom_post_anthro <- mdom_post %>% 
+  filter((Group.Name == "anthro") | (Group.Name == "I_anthro")) %>% 
+  group_by(Group.Name) %>% 
+  summarise(Signal = sum(Volume)) %>% 
+  mutate(pct = Signal/sum(Signal)) %>% 
+  mutate(pct_r = 100*round(pct, 3)) %>% 
+  mutate(pct_r.p = paste(pct_r, "%", sep = " ")) %>% 
+  left_join(anthro_labs)
+
+m <- ggplot(mdom_post_anthro, aes(x="", y=pct, fill=Group.labs))+
+  geom_bar(width = 1, stat = "identity")+
+  coord_polar("y")+
+  geom_text(aes(label = pct_r.p), position = position_stack(vjust = 0.5), size = 6)+
+  theme_classic() +
+  theme(plot.title = element_text(hjust=0.5),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(fill = "",
+       x = NULL,
+       y = NULL) + 
+  ggtitle("Post-Transport Anthropogenic \n Dissolved Organic Signal at SeaScape- \n Pre-Existing vs Introduced")+
+  theme(text = element_text(size = 15))+
+  scale_fill_manual(values = c("mediumpurple3", "indianred2"))
+
+m
+
+
+png("hr_transport.png", width=6, height=5,
+    units="in", res=300, pointsize=12)
+m
+dev.off()
+
+
+
+```
+
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
