@@ -1,9 +1,10 @@
 ---
-title: "GCxGC Processing: Blob Tables to Timelines. SeaScape Aerosol Example"
+title: 'GCxGC Processing: Blob Tables to Timelines. SeaScape Aerosol Example'
 author: "Emily Barnes"
 date: "September 10, 2020"
-output: github_document
-output: html_document
+output:
+  github_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -29,6 +30,9 @@ library(RANN)
 library("survival")
 library("Hmisc")
 
+library(MARSS)
+library(utils)
+
 
 #install.packages("survival")
 
@@ -38,6 +42,7 @@ library(lattice)
 
 library(survival)
 library(Hmisc)
+library(lubridate)
 #install.packages("installr")
 #library(installr)
 ```
@@ -108,12 +113,15 @@ M_t_full <- M_t %>%
 
 names(M_t_full) <- make.names(names(M_t_full),unique = TRUE) 
 
+btz1 <- M_t_full3 %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_")
+# its here
 
 ```
 
 condensing to unique plots
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 Match_factor_floor <- 750
 Reverse_match_factor_floor <- 100
 LRI_diff_floor <- 6
@@ -136,9 +144,17 @@ rt2_floor <- .2 # note: check on this, but for purposes of indexing retention ti
 M_t_LRI <- M_t_full3 %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
   mutate(LRI_diff = replace_na(LRI_diff, -999))
 
+btz2 <- M_t_LRI %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_")
+# its here too
+
 # getting rid of things that should be removed
 remove_match <- M_t_LRI %>% 
   filter(Library.Name == lib_remove_1 | Library.Name == lib_remove_2 | Library.Name == lib_remove_3 | Library.Name == lib_remove_4)
+
+btz3 <- remove_match %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_")
+# not here, good
 
 # identifying the internal standard
 IS_goodmatch <- M_t_LRI %>% 
@@ -165,6 +181,10 @@ small_poorlymatched <- M_t_LRI %>%
   filter(Library.Match.Factor < Match_factor_floor) %>% 
   filter(Volume < 200)
 
+btz4 <- small_poorlymatched %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_")
+# 33/70 in here, makes sense
+
 M_t_all_analytes <- M_t_LRI %>% 
   #anti_join(FB_goodmatch) %>% 
   anti_join(IS_goodmatch) %>% 
@@ -172,9 +192,13 @@ M_t_all_analytes <- M_t_LRI %>%
   anti_join(IS_okmatch) %>% 
   anti_join(remove_match) %>% 
   anti_join(small_poorlymatched) %>% 
-  filter(LRI.I > 1300) 
+  filter(LRI.I > 1200) 
+
+btz1 <- M_t_all_analytes %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_")
 
 ## Getting rid of things that existed and were well matched in the tap water blank
+
 
 
 tap_water_blank <- read_csv("CAICE_tapwater_ssasearched.csv")
@@ -184,6 +208,7 @@ names(tap_water_blank) <- make.names(names(tap_water_blank),unique = TRUE)
 tap_water_blank_matches <- tap_water_blank %>% 
   filter(Library.Match.Factor > 750) %>% 
   filter(Library.Name != "caice_ssi") %>% 
+  filter(Volume > 10000) %>% 
   dplyr::select(Compound.Name) %>% 
   mutate(in_background = 1)
 
@@ -193,16 +218,15 @@ M_t_all_analytes <- M_t_all_analytes %>%
 
   
 M_t_analyte_unique <- M_t_all_analytes %>% 
+  arrange((r_date)) %>% 
   filter(Library.Name != IS_lib_name) %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
-  filter(Library.Match.Factor > Match_factor_floor) %>% 
+  filter(Library.Match.Factor > Match_factor_floor | Description == "match") %>% 
   #filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
   arrange(desc(Volume)) %>% 
   arrange(Compound.Name) %>% 
   arrange(r_date) %>% 
-  distinct(Compound.Name, r_date, .keep_all = TRUE)
-
-
+  distinct(Compound.Name, r_date, .keep_all = TRUE) 
 
 
 
@@ -213,6 +237,7 @@ Important to note: the blob names are messed up for the template from 0805- stil
 
 Tracing Library Performance
 ```{r}
+
 # tracking the mass of all of the analytes before bad matches are screened out for later analysis of library performance
 M_t_all_analytes_volcount <- M_t_all_analytes %>% 
   group_by(File_num) %>% 
@@ -420,6 +445,8 @@ Adding in cumsum and pct found to analyte unique for raw timelines
 
 compiled_comp_info <- read_csv("Compiled_Compoundinfo_Blobtable_SS.csv")
 
+names(compiled_comp_info) <- make.names(names(compiled_comp_info),unique = TRUE)
+
 compiled_comp_info.findable <- compiled_comp_info %>% 
   filter(Library.Match.Factor_NISTmain> 800) %>% 
   mutate(Identifiable = TRUE) %>% 
@@ -443,15 +470,17 @@ compiled_comp_info %>%
   labs(fill = "",
        x = NULL,
        y = NULL) + 
-  ggtitle("735 Novel and Identifiable Submicron SSA Compounds- SeaScape")
+  ggtitle("765 Novel and Identifiable Submicron SSA Compounds- SeaScape")
 
 ```
 
 
 ```{r}
 SeaScape_cumsum_raw <- M_t_analyte_unique %>% 
+  mutate(tic = 1) %>% 
   group_by(Compound.Name) %>% 
-  summarise(raw_cumsum = sum(Punch_t_norm_vol)) %>% 
+  summarise(raw_cumsum = sum(Punch_t_norm_vol), num_obs = sum(tic)) %>% 
+  mutate(pct_obs = num_obs/nrow(bt_sum_bloom3)) %>% 
   arrange(desc(raw_cumsum))
 
 
@@ -479,35 +508,35 @@ for(i in 1:nrow(compiled_comp_info.findable)){
 }
 
 
-for(i in 1:100){
-  big_c <- SeaScape_cumsum_raw$Compound.Name[i]
-  
-  f2 <- M_t_analyte_unique_info %>% 
-    filter(Compound.Name == big_c) %>% 
-    ggplot(aes(x = r_date, y = Volume_Fraction, color = Compound.Name_NISTmain))+
-    geom_line()+
-    geom_point(aes(x = r_date, y = Volume_Fraction, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
-  
-  print(f2)
-  
-  
-  
-  
-}
+# for(i in 1:100){
+#   big_c <- SeaScape_cumsum_raw$Compound.Name[i]
+#   
+#   f2 <- M_t_analyte_unique_info %>% 
+#     filter(Compound.Name == big_c) %>% 
+#     ggplot(aes(x = r_date, y = Volume_Fraction, color = Compound.Name_NISTmain))+
+#     geom_line()+
+#     geom_point(aes(x = r_date, y = Volume_Fraction, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
+#   
+#   print(f2)
+#   
+#   
+#   
+#   
+# }
 
-for(i in 1:100){
-  big_c <- SeaScape_cumsum_raw$Compound.Name[i]
-  
-  f3 <- M_t_analyte_unique_info %>% 
-    filter(Compound.Name == big_c) %>% 
-    ggplot(aes(x = r_date, y = Punch_t_norm_vol, color = Compound.Name_NISTmain))+
-    geom_line()+
-    geom_point(aes(x = r_date, y = Punch_t_norm_vol, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
-  
-  print(f3)
-  
-  
-}
+# for(i in 1:100){
+#   big_c <- SeaScape_cumsum_raw$Compound.Name[i]
+#   
+#   f3 <- M_t_analyte_unique_info %>% 
+#     filter(Compound.Name == big_c) %>% 
+#     ggplot(aes(x = r_date, y = Punch_t_norm_vol, color = Compound.Name_NISTmain))+
+#     geom_line()+
+#     geom_point(aes(x = r_date, y = Punch_t_norm_vol, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
+#   
+#   print(f3)
+#   
+#   
+# }
 
 
 
@@ -516,12 +545,21 @@ for(i in 1:100){
 
 Internal Standard Mapping
 
-```{r IS_mapping}
+```{r IS_mapping1}
 # note: unlike sample analytes, internal standard compounds are frequently split vertically into multiple blobs because of the high volume.  In order to account for this, I am summing all blobs together that meet the high match criteria and are very close in the first dimension.
 IS_unique <- IS_goodmatch %>% 
   group_by(Compound.Name, File_num) %>% 
   summarise(Volume_tot = sum(Volume)) %>% 
-  filter(Compound.Name != "glucose-13C6")
+  filter(Compound.Name != "glucose-13C6") %>% 
+  filter(Compound.Name != "dC14") 
+
+fixing <- data.frame(table(IS_unique$Compound.Name)) %>% 
+  mutate(Compound.Name = Var1)
+
+IS_tofix <- IS_unique %>% 
+  left_join(fixing) %>% 
+  filter(Freq < 37) %>% 
+  left_join(bt_sum_bloom3, by = "File_num")
 
 IS_unique_c <- IS_unique %>% 
   mutate(tic = 1) %>% 
@@ -530,10 +568,19 @@ IS_unique_c <- IS_unique %>%
 
 c<- data.frame(table(IS_unique$Compound.Name))
 
-IS_positions <- IS_goodmatch %>% 
-  group_by(Compound.Name, File_num) %>% 
-  #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+# note: this is not knitting, not sure why but did temporary work around
+# IS_positions <- IS_goodmatch %>% 
+#   filter(Compound.Name != "glucose-13C6") %>% 
+#   filter(Compound.Name != "dC14") %>% 
+#   group_by(Compound.Name, File_num) %>% 
+#   #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+#   summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+# 
+# IS_positions_knit <- write.csv(IS_positions, "IS.pos.knit.csv")
+
+IS_positions <- read.csv("IS.pos.knit.csv") %>% 
+  dplyr::select(-X)
+  
 
 IS_avg_vols_toadd <- IS_unique %>% 
   group_by(Compound.Name) %>% 
@@ -563,11 +610,17 @@ IS_positions_202008061332 <- read.csv("GCxGC_20200806_1332.h5_img01_IS_selected_
 IS_rt2 <- IS_positions_202008061332 %>% 
   dplyr::select(Compound.Name, Retention.II..sec.)
 
+IS_positions <- IS_goodmatch %>% 
+  filter(Compound.Name != "glucose-13C6") %>% 
+  filter(Compound.Name != "dC14") %>% 
+  group_by(Compound.Name, File_num) %>% 
+  #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+
 
 IS_positions_avg <- IS_positions %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE)) %>% 
-  left_join(IS_rt2)
+  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), Retention.II..sec. = mean(RI2, na.rm = TRUE)) 
 
 
 write.csv(IS_positions_avg, "IS_positions_avg.csv")
@@ -579,7 +632,7 @@ IS_avg_vols <- IS_unique %>%
   left_join(IS_unique) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
-  left_join(IOP12_btsum)
+  left_join(bt_sum_bloom3)
 
 IS_cat <- read.csv("IS_withcat.csv")
 IS_cat <- IS_cat %>% 
@@ -605,17 +658,2794 @@ IS_stability %>%
   
 
 
+
 IS_avg_vols %>% ggplot(aes(x = r_date, y = IS_med_norm, color = Compound.Name)) +
   geom_point()
   
 
 IS_avg_vols %>% ggplot(aes(x = r_date, y = Volume_tot, color = Compound.Name)) +
   geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = LRI_avg_all, y = IS_mean_norm, color = r_date))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = LRI_avg_all, y = Volume_tot, color = r_date))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = Retention.II..sec., y = IS_mean_norm, color = r_date))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = Retention.II..sec., y = Volume_tot, color = r_date))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = LRI_avg_all, y = IS_mean_norm, color = F_group_cat))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = LRI_avg_all, y = Volume_tot, color = F_group_cat))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = Retention.II..sec., y = IS_mean_norm, color = F_group_cat))+
+  geom_point()
+
+IS_stability %>% 
+  ggplot(aes(x = Retention.II..sec., y = Volume_tot, color = F_group_cat))+
+  geom_point()
+```
+Conclusion: Normalizing by the nearest mean or median normalized internal standard volume is most appropriate, as the responses of different internal standard on a raw volume basis are a function of chemical characteristics rather than purely instrument response (itself a function of matrix effects and instrument condition, which cannot be effectively deconvoluted).  As the quantification model takes into account chemical characteristics through a machine learning model trained on the mass spectrum, normalization by raw internal standard volume introduces covarying factors.
+
+```{r IS_mapping2}
+LRI_weight = 2
+LRII_weight = 1
+
+LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
+LRI2_avg = mean(IS_positions_avg$Retention.II..sec.)
+
+IS_positions_avg <- IS_positions_avg %>% 
+  mutate(relative_LRI = (LRI_avg_all/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (Retention.II..sec./LRI2_avg)*LRII_weight)
+
+write.csv(IS_positions_avg, "IS_positions_avg_rel.csv")
+
+Analyte_positions_trial <- M_t_analyte_unique %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+
+# note filtering out three small blobs outside of RI window
+
+Analyte_positions <- M_t_analyte_unique %>% 
+  filter(!is.na(LRI.I)) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = (mean(Retention.II..sec.) - rt2_floor))
+
+Analyte_positions <- Analyte_positions %>% 
+  mutate(relative_LRI = (LRI_avg/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (RI2/LRI2_avg)*LRII_weight)
+
+# checking to make sure that the ranges match up, eg back end checking that same norm method used on moth IS and analyte positions
+summary(IS_positions_avg$relative_LRI)
+summary(Analyte_positions$relative_LRI)
+summary(IS_positions_avg$relative_LRI2)
+summary(Analyte_positions$relative_LRI2)
+
+Analyte_pos_short <- Analyte_positions %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+IS_pos_short <- IS_positions_avg %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+#knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
+
+#Old method, only using 1 nearest
+#testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
+
+# note 1.19 is the min radius at which every compound has at least one nearest
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 3.9)
+
+
+Analyte_IS_Index <- data.frame(testnn$nn.idx)
+# old method only using 1 nearest
+# Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
+Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3)
+
+# old method with only 1 IS
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
+
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
+#   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
+#   mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
+
+Analyte_with_IS <- Analyte_pos_ad %>% 
+  mutate(IS_appropriate1 = NA) %>% 
+  mutate(IS_appropriate2 = NA) %>% 
+  mutate(IS_appropriate3 = NA)
+
+for(i in 1:nrow(Analyte_with_IS)){
+  t_isind_1 <- Analyte_with_IS$IS_index1[i]
+  t_isind_2 <- Analyte_with_IS$IS_index2[i]
+  t_isind_3 <- Analyte_with_IS$IS_index3[i]
+  
+  if(t_isind_1 > 0){
+  t_isap_1 <- IS_positions_avg$Compound.Name[t_isind_1]
+  }else{
+    t_isap_1 <- NA
+  }
+  
+  if(t_isind_2 > 0){
+  t_isap_2 <- IS_positions_avg$Compound.Name[t_isind_2]
+  }else{
+    t_isap_2 <- NA
+  }
+  
+  if(t_isind_3 > 0){
+  t_isap_3 <- IS_positions_avg$Compound.Name[t_isind_3]
+  }else{
+    t_isap_3 <- NA
+  }
+  
+  
+  
+  Analyte_with_IS$IS_appropriate1[i] <- t_isap_1
+  Analyte_with_IS$IS_appropriate2[i] <- t_isap_2
+  Analyte_with_IS$IS_appropriate3[i] <- t_isap_3
+  
+}
+
+# Analyte_with_IS_positions <- Analyte_with_IS %>% 
+#   left_join(Analyte_positions) %>% 
+#   left_join(IS_positions_avg, by = c("IS_appropriate"= "Compound.Name"))
+
+Analyte_with_IS_positions <- Analyte_with_IS %>% 
+  left_join(Analyte_positions) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate1"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate2"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name"))
+
+M_t_analyte_withIS <- M_t_analyte_unique %>% 
+  left_join(Analyte_with_IS) %>% 
+  mutate(IS_vol1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol_dalk= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm_dalk= -999*(LRI.I/LRI.I))
+
+# old- only 1 IS
+# M_t_analyte_withIS <- M_t_analyte_unique %>% 
+#   left_join(Analyte_with_IS) %>% 
+#   mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
+#   mutate(IS_mean_norm= -999*(LRI.I/LRI.I)) 
+
+
+# for(i in 1:nrow(M_t_analyte_withIS)){
+#   
+#   
+#   IS_name = M_t_analyte_withIS$IS_appropriate[i]
+#   File_num_t = M_t_analyte_withIS$File_num[i]
+#   
+#   IS_indicated <- IS_stability %>% 
+#     filter(Compound.Name == IS_name) %>% 
+#     filter(File_num == File_num_t)
+#   
+#   M_t_analyte_withIS$IS_vol[i] <-IS_indicated$Volume_tot[1]
+#   M_t_analyte_withIS$IS_mean_norm[i] <-IS_indicated$IS_mean_norm[1]
+#   
+#   
+# }
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  
+  
+  IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
+  IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
+  IS_name3 = M_t_analyte_withIS$IS_appropriate3[i]
+  
+  
+  
+  
+  File_num_t = M_t_analyte_withIS$File_num[i]
+  
+  IS_indicated1 <- IS_stability %>% 
+    filter(Compound.Name == IS_name1) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol1[i] <-IS_indicated1$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm1[i] <-IS_indicated1$IS_mean_norm[1]
+  
+  IS_indicated2 <- IS_stability %>% 
+    filter(Compound.Name == IS_name2) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol2[i] <-IS_indicated2$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm2[i] <-IS_indicated2$IS_mean_norm[1]
+  
+  IS_indicated3 <- IS_stability %>% 
+    filter(Compound.Name == IS_name3) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol3[i] <-IS_indicated3$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm3[i] <-IS_indicated3$IS_mean_norm[1]
+  
+}
+
+# 
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+#   mutate(vol_is_rawnorm = Volume/IS_vol)
+#   
+
+# note- this step is not working
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
+#   mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  isvols_raw <- c(M_t_analyte_withIS$IS_vol1[i], M_t_analyte_withIS$IS_vol2[i], M_t_analyte_withIS$IS_vol3[i])
+  
+  M_t_analyte_withIS$IS_vol[i] = mean(isvols_raw, na.rm = TRUE)
+  
+  isvols_norm <- c(M_t_analyte_withIS$IS_mean_norm1[i], M_t_analyte_withIS$IS_mean_norm2[i], M_t_analyte_withIS$IS_mean_norm3[i])
+  
+  M_t_analyte_withIS$IS_mean_norm[i] = mean(isvols_norm, na.rm = TRUE)
+  
+}
+
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+  mutate(vol_is_rawnorm = Volume/IS_vol) %>%
+  mutate(vol_is_normnorm_ptnorm = vol_is_normnorm/(Punch_num_sample_time_norm)) %>% 
+  mutate(vol_is_rawnorm_ptnorm = vol_is_rawnorm/(Punch_num_sample_time_norm))
+
+
+IS_problems <- M_t_analyte_withIS %>% 
+  filter(is.na(IS_appropriate1))
+
+File_norm_totorg <- M_t_analyte_withIS %>% 
+  group_by(r_date) %>% 
+  summarise(vol_normnorm_total = sum(vol_is_normnorm_ptnorm), vol_rawnorm_total = sum(vol_is_rawnorm_ptnorm))
+
+File_norm_totorg %>% 
+  ggplot(aes(x = r_date, y = vol_rawnorm_total))+
+  geom_point()
+
+File_norm_totorg %>% 
+  ggplot(aes(x = r_date, y = vol_normnorm_total))+
+  geom_point()
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  left_join(File_norm_totorg) %>% 
+  mutate(vol_is_normnorm_ptnorm_totorgnorm = vol_is_normnorm_ptnorm/vol_normnorm_total)
+
+
+```
+Adding fields to cumsum to reflect total org norm and IS normnorm so that factors can be weighted to equally emphasize things important at beginning and end of bloom
+```{r}
+
+SeaScape_normalized_cumsum <- M_t_analyte_withIS %>% 
+  group_by(Compound.Name) %>% 
+  summarise(totorgnorm_cumsum = sum(vol_is_normnorm_ptnorm_totorgnorm), isnormnormptnorm_cumsum = sum(vol_is_normnorm_ptnorm))
+
+tot_norm_vol = sum(SeaScape_normalized_cumsum$isnormnormptnorm_cumsum, na.rm = TRUE)
+
+SeaScape_normalized_cumsum_cumulative <- SeaScape_normalized_cumsum %>% 
+  mutate(isnormnormptnorm_pct = isnormnormptnorm_cumsum/tot_norm_vol) %>% 
+  mutate(isnormnorm_ptnorm_pct_cumulative = isnormnormptnorm_pct) %>% 
+  arrange(desc(isnormnormptnorm_pct)) %>% 
+  mutate(rownum = row_number())
+
+for(i in 2:nrow(SeaScape_normalized_cumsum_cumulative)){
+  SeaScape_normalized_cumsum_cumulative$isnormnorm_ptnorm_pct_cumulative[i]= SeaScape_normalized_cumsum_cumulative$isnormnormptnorm_pct[i]+ SeaScape_normalized_cumsum_cumulative$isnormnorm_ptnorm_pct_cumulative[i-1]
+  
+}
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+# plotting normalized timelines, normalized by both total organic (red) and internal standard (blue) to get a general sense for underlying trends
+
+```{r}
+
+for(i in 1:50){
+  
+  print(i)
+  big_c <- SeaScape_cumsum_raw$Compound.Name[i]
+  
+  f4 <- M_t_analyte_withIS %>% 
+    filter(Compound.Name == big_c) %>% 
+    left_join(compiled_comp_info, by = "Compound.Name") %>% 
+    ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm, color = Compound.Name))+
+    geom_line()+
+    geom_point(aes(x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
+  
+  print(f4)
+  
+  f5 <- M_t_analyte_withIS %>% 
+    filter(Compound.Name == big_c) %>% 
+    left_join(compiled_comp_info, by = "Compound.Name") %>% 
+    ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, color = Compound.Name))+
+    geom_line(color = "blue")+
+    geom_point(aes(x = r_date, y = vol_is_normnorm_ptnorm, shape = T_O_D, fill = Library.Match.Factor_NISTmain))
+  
+  print(f5)
+  
+  
+}
+
+```
+
+Proceeding with DFA on the total organic normalized time series
+
+```{r}
+n_obs <- 100
+n_factors <- 5
+
+cumsum_keep <- SeaScape_cumsum_raw[1:n_obs,] 
+
+cumsum_keep <- cumsum_keep %>% 
+  mutate(keep = 1) %>% 
+  dplyr::select(Compound.Name, keep)
+
+just_totorg_norm <- M_t_analyte_withIS %>% 
+  left_join(cumsum_keep) %>% 
+  filter(keep == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_totorgnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm_totorgnorm, fill = 0) %>% 
+  dplyr::select(-r_date)
+
+dfa_totnorm <- t(just_totorg_norm)
+
+N.ts <- nrow(dfa_totnorm)
+TT <- ncol(dfa_totnorm)
+
+Sigma <- sqrt(apply(dfa_totnorm, 1, var, na.rm = TRUE))
+y.bar <- apply(dfa_totnorm, 1, mean, na.rm = TRUE)
+dat.z <- (dfa_totnorm - y.bar) * (1 / Sigma)
+rownames(dat.z) <- rownames(dfa_totnorm)
+
+zmat <- matrix(NA, nrow = n_obs, ncol = n_factors)
+
+for(i in 1:n_obs){
+  for(j in 1:n_factors){
+    if(j>i){
+      zmat[i,j] = 0
+    }else{
+      zmat[i,j]= paste("z", i, j, sep = "")
+    }
+  }
+  
+}
+
+
+Q <- B <- diag(1, n_factors)
+
+rmat <- matrix(NA, nrow = n_obs, ncol = n_obs)
+
+for(i in 1:n_obs){
+  row_i = i
+  
+  for(j in 1:n_obs){
+    col_j = j
+    
+    if(col_j == row_i){
+      rmat[i,j]= paste("r", i, j, sep = "")
+    }else{
+      rmat[i,j]= 0
+    }
+    
+  }
+  
+}
+
+x0 <- U <- A <- "zero"
+
+V0 <- diag(n_obs, n_factors)
+```
+
+
+Running 4-8 trend solutions to identify optimum solution.  Note: not run in knit due to compile time probelms
+```{r, eval = FALSE}
+dfa.model <- list(Z = zmat, A = "zero", R = rmat, B = B, U = U,
+Q = Q, x0 = x0, V0 = V0)
+cntl.list <- list(maxit = 50)
+
+kemz.3 <- MARSS(dat.z, model = dfa.model, control = cntl.list)
+
+model.list <- list(m = 5, R = "diagonal and unequal")
+kemz.5 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 4, R = "diagonal and unequal")
+kemz.4 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+print(cbind(
+model = c("8 trends", "7 trends", "6 trends", "5 trends", "4 trends"),
+AICc = round(c(kemz.8$AICc, kemz.7$AICc, kemz.6$AICc,  kemz.5$AICc, kemz.4$AICc))
+),
+quote = FALSE
+)
+
+ttet <- data.frame(kemz.5$coef)
+write.csv(ttet, "dfa_try1.csv")
+
+model.list <- list(m = 6, R = "diagonal and unequal")
+kemz.6 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 7, R = "diagonal and unequal")
+kemz.7 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 8, R = "diagonal and unequal")
+kemz.8 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+
+print(cbind(
+model = c("8 trends", "7 trends", "6 trends", "5 trends", "4 trends"),
+AICc = round(c(kemz.8$AICc, kemz.7$AICc, kemz.6$AICc,  kemz.5$AICc, kemz.4$AICc))
+),
+quote = FALSE
+)
+
+# 7 trends minimizes the AICc (ask what this is)
+
+```
+
+# now rotating to find trends and loadings
+
+```{r}
+dat.z <- zscore(dfa_totnorm)
+
+big.maxit.cntl.list <- list(minit = 20, maxit = 50, allow.degen = FALSE)
+model.list <- list(m = 7, R = "diagonal and unequal")
+the.fit <- MARSS(dat.z, model = model.list, form = "dfa", control = big.maxit.cntl.list)
+
+# set R = 0
+
+# get the inverse of the rotation matrix
+Z.est <- coef(the.fit, type = "matrix")$Z
+H.inv <- 1
+if (ncol(Z.est) > 1) H.inv <- varimax(coef(the.fit, type = "matrix")$Z)$rotmat
+
+# rotate factor loadings
+Z.rot <- Z.est %*% H.inv
+# rotate trends
+trends.rot <- solve(H.inv) %*% the.fit$states
+
+
+```
+
+```{r}
+# plot the factor loadings
+spp <- rownames(dat.z)
+minZ <- 0.05
+m <- dim(trends.rot)[1]
+ylims <- c(-1.1 * max(abs(Z.rot)), 1.1 * max(abs(Z.rot)))
+#par(mfrow = c(ceiling(m / 2), 1), mar = c(3, 4, 1.5, 0.5), oma = c(0.4, 1, 1, 1))
+for (i in 1:m) {
+
+  plot(c(1:N.ts)[abs(Z.rot[, i]) > minZ], as.vector(Z.rot[abs(Z.rot[, i]) > minZ, i]),
+type = "h", lwd = 2, xlab = "", ylab = "", xaxt = "n", ylim = ylims, xlim = c(0, N.ts + 1)
+)
+for (j in 1:N.ts) {
+if (Z.rot[j, i] > minZ) {
+text(j, -0.05, spp[j], srt = 90, adj = 1, cex = 0.9)
+}
+if (Z.rot[j, i] < -minZ) {
+text(j, 0.05, spp[j], srt = 90, adj = 0, cex = 0.9)
+}
+abline(h = 0, lwd = 1, col = "gray")
+} # end j loop
+mtext(paste("Factor loadings on trend", i, sep = " "), side = 3, line = .5)
+} # end i loop
+```
+Visualizing the trends
+```{r}
+
+trends.plot <- t(trends.rot)
+
+r_date <- bt_sum_bloom3$r_date
+
+chla <- bt_sum_bloom3$Extracted_Chla
+
+hb <- bt_sum_bloom3$Bulk_HB
+
+trends.plot.df <- as.data.frame(trends.plot)
+trends.plot.df <- cbind(r_date, trends.plot.df, chla, hb)
+trends.plot.df.just.trends <- trends.plot.df %>% 
+  dplyr::select(-chla, -hb)
+
+maxV3 = max(trends.plot.df$V3, na.rm = TRUE)
+maxchla = max(trends.plot.df$chla, na.rm = TRUE)
+maxhb = max(trends.plot.df$hb, na.rm = TRUE)
+
+trends.plot.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.df %>% 
+  ggplot()+
+  geom_point(aes(x = r_date, y = chla))+
+  geom_line(aes(x = r_date, y = V1, color = "Factor 1"))+
+  geom_line(aes(x = r_date, y = V2), color = "orange")+
+  geom_line(aes(x = r_date, y = V3), color = "yellow")+
+  geom_line(aes(x = r_date, y = V4), color = "green")+
+  geom_line(aes(x = r_date, y = V5), color = "blue")+
+  geom_line(aes(x = r_date, y = V6), color = "purple")+
+  geom_line(aes(x = r_date, y = V7), color = "black")+
+  geom_point(aes(x = r_date, y = hb/420000, color = "Het_Bact"), color = "red")
+
+trends.plot.df.cor <- trends.plot.df %>% 
+  dplyr::select(-r_date)
+
+cov_factors_dfa <- data.frame(cor(trends.plot.df.cor, use ="pairwise.complete.obs"))
+```
+# seven individual plots of factors for visualization
+
+```{r, fig.width=6.5, fig.height = 5}
+p_f1 <- trends.plot.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line(size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 1- Biology Associated")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("purple3", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f2 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic \nPersistent"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 2- Anthropogenic Persistent")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("grey20", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f3 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic \nRapid Decay"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 3- Anthropogenic Rapid Decay")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("orange1", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f4 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 4- Bacteria Associated")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("blue4", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f5 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 5- Chlorophyll Associated")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("darkgreen", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f6 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 6- Chlorophyll Associated")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("green3", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f7 <- trends.plot.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, \nBiodegraded"), size = 1.2)+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  ggtitle("Factor 7- Anthropogenic Biodegraded")+
+  theme(legend.title = element_blank(), legend.position = "bottom", axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20), plot.title = element_text(size = 20, hjust = .5, margin = margin(b = -20)))+
+  scale_color_manual(values=c("purple4", "blue1", "green1"))+
+  ylab("Dynamic Factor Analysis \nFactors (Z-scored)")+
+  xlab("")+
+  #ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")+
+  ylim(-4, 6)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+p_f1
+p_f2
+p_f3
+p_f4
+p_f5
+p_f6
+p_f7
+
+
+
+```
+
+
+Going rogue, just segregating by correlation with decaying time series or biology
+
+```{r}
+anthro_decay <- trends.plot.df$V3
+
+just_date_hb_chla <- bt_sum_bloom3 %>% 
+  dplyr::select(r_date, Extracted_Chla, Bulk_HB)
+
+
+
+just_over50pct <- M_t_analyte_withIS %>% 
+  left_join(SeaScape_cumsum_raw, by = "Compound.Name") %>% 
+  filter(pct_obs > .3) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_totorgnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm_totorgnorm, fill = 0) %>% 
+  left_join(just_date_hb_chla) %>% 
+  dplyr::select(-r_date)
+
+just_over50pct$anthrodecay<- anthro_decay
+
+cov_bio_anthro <- data.frame(cor(just_over50pct, use ="pairwise.complete.obs"))
+
+
+histogram(cov_bio_anthro$Extracted_Chla)
+
+histogram(cov_bio_anthro$Bulk_HB)
+
+histogram(cov_bio_anthro$anthrodecay)
+
+
+cov_bio_anthro <- tibble::rownames_to_column(cov_bio_anthro, "Compound.Name") 
+
+cor_floor <- .4
+
+cov_bio_anthro.bio <- cov_bio_anthro %>% 
+  dplyr::select(Compound.Name, Extracted_Chla, Bulk_HB, anthrodecay) %>% 
+  filter(Extracted_Chla > cor_floor | Bulk_HB > cor_floor) %>% 
+  left_join(compiled_comp_info) %>% 
+  left_join(SeaScape_cumsum_raw) %>% 
+  mutate(IDed = ifelse(Library.Match.Factor_NISTmain >750, "T", "F")) %>% 
+  filter(Compound.Name != "Extracted_Chla") %>% 
+  filter(Compound.Name!= "Bulk_HB")
+
+cov_bio_anthro.anthro <- cov_bio_anthro %>% 
+  dplyr::select(Compound.Name, Extracted_Chla, Bulk_HB, anthrodecay) %>% 
+  filter(anthrodecay > cor_floor) %>% 
+  left_join(compiled_comp_info) %>% 
+  left_join(SeaScape_cumsum_raw)%>% 
+  mutate(IDed = ifelse(Library.Match.Factor_NISTmain >750, "T", "F")) %>% 
+  filter(Compound.Name!= "anthrodecay")
+
+hist(cov_bio_anthro.bio$Library.Match.Factor_NISTmain)
+hist(cov_bio_anthro.anthro$Library.Match.Factor_NISTmain)
+
+hist(cov_bio_anthro.bio$raw_cumsum)
+hist(cov_bio_anthro.anthro$raw_cumsum)
+
+table(cov_bio_anthro.anthro$IDed)
+table(cov_bio_anthro.bio$IDed)
+
+ggplot(cov_bio_anthro.anthro, aes(x = raw_cumsum))+
+  geom_histogram()+
+  xlim(0, 250000)
+
+ggplot(cov_bio_anthro.bio, aes(x = raw_cumsum))+
+  geom_histogram()+
+  xlim(0, 75000)
+
+cov_bio_anthro.anthro <- cov_bio_anthro.anthro %>% 
+  arrange(desc(raw_cumsum)) %>% 
+  mutate(raw_cumsum_dist = raw_cumsum)
+
+cov_bio_anthro.bio <- cov_bio_anthro.bio %>% 
+  arrange(desc(raw_cumsum)) %>% 
+  mutate(raw_cumsum_dist = raw_cumsum)
+
+for(i in 2:nrow(cov_bio_anthro.anthro)){
+  cov_bio_anthro.anthro$raw_cumsum_dist[i]= cov_bio_anthro.anthro$raw_cumsum[i]+ cov_bio_anthro.anthro$raw_cumsum_dist[i-1]
+  
+}
+
+for(i in 2:nrow(cov_bio_anthro.bio)){
+  cov_bio_anthro.bio$raw_cumsum_dist[i]= cov_bio_anthro.bio$raw_cumsum[i]+ cov_bio_anthro.bio$raw_cumsum_dist[i-1]
+  
+}
+
+cov_bio_anthro.anthro <- cov_bio_anthro.anthro %>% 
+  mutate(raw_cumsum_dist.norm = raw_cumsum_dist/sum(raw_cumsum, na.rm = TRUE))
+
+cov_bio_anthro.anthro <- tibble::rowid_to_column(cov_bio_anthro.anthro, "ID") 
+
+cov_bio_anthro.anthro <- cov_bio_anthro.anthro %>% 
+  mutate(ID.norm = ID/max(ID))
+
+cov_bio_anthro.bio <- cov_bio_anthro.bio %>% 
+  mutate(raw_cumsum_dist.norm = raw_cumsum_dist/sum(raw_cumsum, na.rm = TRUE))
+
+cov_bio_anthro.bio <- tibble::rowid_to_column(cov_bio_anthro.bio, "ID")
+
+cov_bio_anthro.bio <- cov_bio_anthro.bio %>% 
+  mutate(ID.norm = ID/max(ID))
+
+ggplot()+
+  geom_point(data = cov_bio_anthro.anthro, aes(x = ID.norm, y = raw_cumsum_dist.norm), color = "red")+
+  geom_point(data = cov_bio_anthro.bio, aes(x = ID.norm, y = raw_cumsum_dist.norm), color = "blue")
+
+
+#Ask a question about hypothesis testing: test hypothesis that these distributions are significantly different
+
+# t test
+
+x = cov_bio_anthro.bio$Library.Match.Factor_NISTmain
+y = cov_bio_anthro.anthro$Library.Match.Factor_NISTmain
+
+t.test(x, y, alternative = c("greater"), var.equal = TRUE)
+# knowledge disttibution difference appears not to be different between two; segregated by yes/no above 800 may be significant however, investigate farther later. 
+
+
+
+```
+
+Looking at how the biogenic and anthropogenic decreasing compounds compare to total volume
+```{r}
+
+cov_bio_anthro.anthro.names <- cov_bio_anthro.anthro %>% 
+  mutate(source_class = "Anthropogenic, Rapid Depletion") %>% 
+  dplyr::select(Compound.Name, source_class) 
+
+cov_bio_anthro.bio.names <- cov_bio_anthro.bio %>% 
+  mutate(source_class = "Biogenic") %>% 
+  dplyr::select(Compound.Name, source_class) 
+
+cov_bio_anthro.names <- cov_bio_anthro.anthro.names %>% 
+  full_join(cov_bio_anthro.bio.names)
+
+left_joinUncat <- function(x, y, fill = "Uncategorized"){
+  z <- left_join(x, y)
+  tmp <- setdiff(names(z), names(x))
+  z <- replace_na(z, setNames(as.list(rep(fill, length(tmp))), tmp))
+  z
+}
+
+Source_apportionment <- SeaScape_cumsum_raw %>% 
+  left_joinUncat(cov_bio_anthro.names) %>% 
+  mutate(tic = 1)
+
+Source_apportionment %>% 
+  ggplot(aes(x = "", y = tic, fill = source_class)) + 
+  geom_col()+
+  coord_polar("y", start = 0)+
+  theme_classic() +
+  theme(plot.title = element_text(hjust=0.5),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(fill = "",
+       x = NULL,
+       y = NULL) + 
+  ggtitle("Preliminary Source Aportionment of \n745 SeaScape Compounds")
+
+Source_apportionment %>% 
+  ggplot(aes(x = "", y = raw_cumsum, fill = source_class)) + 
+  geom_col()+
+  coord_polar("y", start = 0)+
+  theme_classic() +
+  theme(plot.title = element_text(hjust=0.5),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  labs(fill = "",
+       x = NULL,
+       y = NULL) + 
+  ggtitle("Preliminary Source Aportionment of \nSeaScape Organic Submicron SSA Signal")
+
+
+  
+
+
+```
+Now looking at correlations of all 745 compounds with the 7 underlying processes
+
+```{r}
+# Setting floor: must be in > 20% of samples for time series analysis
+pct_floor = 20
+
+all.comp_zscor_params <- M_t_analyte_withIS %>%
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_totorgnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm_totorgnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm_totorgnorm", -r_date) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_vol_ptnorm_totorgnorm = mean(vol_is_normnorm_ptnorm_totorgnorm, na.rm = TRUE), sd_vol_ptnorm_totorgnorm = sd(vol_is_normnorm_ptnorm_totorgnorm, na.rm = TRUE)) %>% 
+  filter(!is.na(sd_vol_ptnorm_totorgnorm)) %>% 
+  dplyr::select(Compound.Name, mean_vol_ptnorm_totorgnorm, sd_vol_ptnorm_totorgnorm)
+
+
+forcorr_allcomp.zscore.long <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_totorgnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm_totorgnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm_totorgnorm", -r_date) %>% 
+  left_join(all.comp_zscor_params, by = "Compound.Name") %>% 
+  filter(!is.na(sd_vol_ptnorm_totorgnorm)) %>% 
+  mutate(zscore.isnormnorm.totorgnorm = (vol_is_normnorm_ptnorm_totorgnorm-mean_vol_ptnorm_totorgnorm)/sd_vol_ptnorm_totorgnorm) %>% 
+  dplyr::select(Compound.Name, r_date, zscore.isnormnorm.totorgnorm)
+
+forcorr_allcomp.zscore <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_totorgnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm_totorgnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm_totorgnorm", -r_date) %>% 
+  left_join(all.comp_zscor_params, by = "Compound.Name") %>% 
+  filter(!is.na(sd_vol_ptnorm_totorgnorm)) %>% 
+  mutate(zscore.isnormnorm.totorgnorm = (vol_is_normnorm_ptnorm_totorgnorm-mean_vol_ptnorm_totorgnorm)/sd_vol_ptnorm_totorgnorm) %>% 
+  dplyr::select(Compound.Name, r_date, zscore.isnormnorm.totorgnorm) %>% 
+  spread(Compound.Name, zscore.isnormnorm.totorgnorm, fill = NA) %>% 
+  right_join(trends.plot.df.just.trends, by = "r_date") %>% 
+  dplyr::select(-r_date)
+
+corr_allcomp.zscore <- data.frame(cor(forcorr_allcomp.zscore, use ="pairwise.complete.obs"))
+
+just_factor_corr <- corr_allcomp.zscore %>% 
+  dplyr::select(V1, V2, V3, V4, V5, V6, V7) 
+
+assignments <- colnames(just_factor_corr)[apply(just_factor_corr,1,which.max)]
+
+just_factor_corr$best_corr <- assignments
+
+factor_corr_dfa <- just_factor_corr %>% 
+  rownames_to_column(var = "Compound.Name") %>% 
+  filter(Compound.Name != "V1") %>% 
+  filter(Compound.Name != "V2") %>%
+  filter(Compound.Name != "V3") %>% 
+  filter(Compound.Name != "V4") %>% 
+  filter(Compound.Name != "V5") %>% 
+  filter(Compound.Name != "V6") %>% 
+  filter(Compound.Name != "V7") 
+
+factor_corr_dfa.justbest <- factor_corr_dfa %>% 
+  dplyr::select(Compound.Name, best_corr)
+
+dfa_factor_keys <- data.frame(best_corr = c("V1", "V2", "V3", "V4", "V5", "V6", "V7"), dfa_key = c("Factor 1 \nBiology Associated\n", "Factor 2 \nAnthropogenic Persistent\n", "Factor 3 \nAnthropogenic Rapid Decay\n", "Factor 4 \nBacteria Associated\n", "Factor 5\nChlorophyll Associated\n", "Factor 6\nChlorophyll Associated\n", "Factor 7\nAnthropogenic, Biodegraded\n"))
+
+M_t_analyte_withIS_dfacor <- M_t_analyte_withIS %>% 
+  left_join(factor_corr_dfa.justbest) %>% 
+  left_join(dfa_factor_keys)
+
+
+
+M_t_analyte_withIS_dfacor %>% 
+  ggplot(aes(fill = dfa_key, x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm))+
+  geom_bar(position = "fill", stat = "identity")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab("Fraction of Submicron SSA Organics")+
+  xlab("")+
+  ggtitle("Submicron SSA Organic Signal Segregated by Source Factor")+
+  scale_fill_manual(values=c("purple3", "grey20", "orange1", "blue4", "green3", "darkgreen", "purple4"))
+
+
+
+
+
+
+
+
+
+
+```
+
+exploring actual compounds in each cat
+```{r}
+
+dfa_comp_assignments <- factor_corr_dfa %>% 
+  left_join(compiled_comp_info)
+
+dfa_comp_assignments.V1 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V1") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# lots of ketones- should check this not sure if makes sense
+
+dfa_comp_assignments.V2 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V2") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# organic acids- this one does not make a whole lot of sense
+
+dfa_comp_assignments.V3 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V3") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# sunscreen!
+
+dfa_comp_assignments.V4 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V4") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# cyclic and oxygenated
+
+dfa_comp_assignments.V5 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V5") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+
+# organic acids and ketones
+
+dfa_comp_assignments.V6 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V6") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# factor 6 representative compounds: dimethyl quinoline
+# also biodegradation products of anthropogenics
+
+dfa_comp_assignments.V7 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V7") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+
+# factor 7 representative compounds: Oil signature, benzothiazoles, PAH's
+
+
+
+
+
+
+```
+
+
+Investigating just benzothiazole- note to self need to rerun code because was initially screened out due to low RI1
+
+
+```{r}
+
+btzs <- compiled_comp_info %>% 
+  filter(!is.na(Benzothiazole)) %>% 
+  dplyr::select(Compound.Name, Benzothiazole, Compound.Name_NISTmain)
+
+btz.timelines.zscored <- forcorr_allcomp.zscore.long %>% 
+  left_join(btzs) %>% 
+  filter(Benzothiazole == TRUE) %>% 
+  left_join(factor_corr_dfa)
+
+btz.dfacorrs <- dfa_comp_assignments %>% 
+  left_join(btzs) %>% 
+  filter(Benzothiazole == TRUE)
+
+btz.dfacorrs %>% 
+  ggplot(aes(x = V6, y = V1, color = V7))+
+  geom_point()
+
+btz.dfacorrs.long <- btz.dfacorrs %>% 
+  dplyr::select(Compound.Name, V1, V2, V3, V4, V5, V6, V7) %>% 
+  gather(key = "DFA_Factor", value = "DFA_Factor.corr", -Compound.Name)
+
+btz.dfacorrs.long %>% 
+  ggplot(aes(x = DFA_Factor, y = DFA_Factor.corr))+
+  geom_boxplot()
+
+# "biology influenced" ok yeah I buy it maybe influenced but def anthropogenic
+btz.timelines.zscored %>% 
+  filter(best_corr == "V1") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+# anthropogenic persistent: nothing there interesting
+btz.timelines.zscored %>% 
+  filter(best_corr == "V2") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+# anthropogenic rapid decay
+btz.timelines.zscored %>% 
+  filter(best_corr == "V3") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+# bacteria associalte
+btz.timelines.zscored %>% 
+  filter(best_corr == "V4") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+
+btz.timelines.zscored %>% 
+  filter(best_corr == "V5") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+# biogenic- anthro breakdown products
+btz.timelines.zscored %>% 
+  filter(best_corr == "V6") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+# biogenic, biodegraded
+btz.timelines.zscored %>% 
+  filter(best_corr == "V7") %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm.totorgnorm, color = Compound.Name))+
+  geom_line()+
+  theme(legend.position = "bottom")
+
+btz.timelines.zscored %>% 
+  group_by(best_corr, r_date) %>% 
+  summarise(mean_btztimeline_zscored = mean(zscore.isnormnorm.totorgnorm)) %>% 
+  ggplot(aes(x = r_date, y = mean_btztimeline_zscored, color = best_corr))+
+  geom_line()
+
+# looking at the non-zscored timelines
+
+btz.timelines <- M_t_analyte_withIS %>% 
+  left_join(btzs) %>% 
+  filter(Benzothiazole == TRUE) %>% 
+  left_join(factor_corr_dfa)
+
+btz.timelines %>% 
+  group_by(best_corr, r_date) %>% 
+  summarise(btz_organics_ISnormnorm = sum(vol_is_normnorm_ptnorm)) %>% 
+  ggplot(aes(x = r_date, y = btz_organics_ISnormnorm, color = best_corr))+
+  geom_line()
+
+btz.timelines %>% 
+  group_by(best_corr, r_date) %>% 
+  summarise(btz_organics_ISnormnorm_totorgnorm = sum(vol_is_normnorm_ptnorm_totorgnorm)) %>% 
+  ggplot(aes(x = r_date, y = btz_organics_ISnormnorm_totorgnorm, color = best_corr))+
+  geom_line()
+
+
+
+```
+
+
+redoing DFA, without normalizing by total organic in each sample- just normalized by internal standard
+
+```{r}
+n_obs <- 75
+n_factors <- 5
+
+SeaScape_normalized_cumsum <- SeaScape_normalized_cumsum %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+cumsum_keep <- SeaScape_normalized_cumsum[1:n_obs,] 
+
+cumsum_keep <- cumsum_keep %>% 
+  mutate(keep = 1) %>% 
+  dplyr::select(Compound.Name, keep)
+
+just_ispt_norm <- M_t_analyte_withIS %>% 
+  left_join(cumsum_keep) %>% 
+  filter(keep == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  dplyr::select(-r_date)
+
+M_t_analyte_withIS %>% 
+  left_join(cumsum_keep) %>% 
+  arrange(keep) %>% 
+  arrange(r_date) %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = keep)) +
+    geom_col()
+
+M_t_analyte_withIS %>% 
+  left_join(cumsum_keep) %>% 
+  arrange(keep) %>% 
+  arrange(r_date) %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = keep)) +
+    geom_bar(position="fill", stat="identity")
+
+
+dfa_isptnorm <- t(just_ispt_norm)
+
+N.ts <- nrow(dfa_isptnorm)
+TT <- ncol(dfa_isptnorm)
+
+Sigma <- sqrt(apply(dfa_isptnorm, 1, var, na.rm = TRUE))
+y.bar <- apply(dfa_isptnorm, 1, mean, na.rm = TRUE)
+dat.z <- (dfa_isptnorm - y.bar) * (1 / Sigma)
+rownames(dat.z) <- rownames(dfa_isptnorm)
+
+zmat <- matrix(NA, nrow = n_obs, ncol = n_factors)
+
+for(i in 1:n_obs){
+  for(j in 1:n_factors){
+    if(j>i){
+      zmat[i,j] = 0
+    }else{
+      zmat[i,j]= paste("z", i, j, sep = "")
+    }
+  }
+  
+}
+
+
+Q <- B <- diag(1, n_factors)
+
+rmat <- matrix(NA, nrow = n_obs, ncol = n_obs)
+
+for(i in 1:n_obs){
+  row_i = i
+  
+  for(j in 1:n_obs){
+    col_j = j
+    
+    if(col_j == row_i){
+      rmat[i,j]= paste("r", i, j, sep = "")
+    }else{
+      rmat[i,j]= 0
+    }
+    
+  }
+  
+}
+
+x0 <- U <- A <- "zero"
+
+V0 <- diag(n_obs, n_factors)
+```
+
+Testing 5-9 factors to determine optimum: note, not run for knit due to run time limitations
+
+```{r, eval = FALSE}
+dfa.model <- list(Z = zmat, A = "zero", R = rmat, B = B, U = U,
+Q = Q, x0 = x0, V0 = V0)
+cntl.list <- list(maxit = 50)
+
+#kemz2.3 <- MARSS(dat.z, model = dfa.model, control = cntl.list)
+
+model.list <- list(m = 5, R = "diagonal and unequal")
+kemz2.5 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 4, R = "diagonal and unequal")
+kemz2.4 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+
+
+ttet <- data.frame(kemz.5$coef)
+write.csv(ttet, "dfa_try1.csv")
+
+model.list <- list(m = 6, R = "diagonal and unequal")
+kemz2.6 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 7, R = "diagonal and unequal")
+kemz2.7 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+model.list <- list(m = 8, R = "diagonal and unequal")
+kemz2.8 <- MARSS(dfa_totnorm,
+model = model.list,
+z.score = TRUE, form = "dfa", control = cntl.list
+)
+
+
+print(cbind(
+model = c("8 trends", "7 trends", "6 trends", "5 trends", "4 trends"),
+AICc = round(c(kemz2.8$AICc, kemz2.7$AICc, kemz2.6$AICc,  kemz2.5$AICc, kemz2.4$AICc))
+),
+quote = FALSE
+)
+
+# print(cbind(
+# model = c("7 trends", "6 trends", "5 trends", "4 trends"),
+# AICc = round(c(kemz2.7$AICc, kemz2.6$AICc,  kemz2.5$AICc, kemz2.4$AICc))
+# ),
+# quote = FALSE
+# )
+
+# 7 trends minimizes the AICc (ask what this is)
+
+```
+
+
+7 trends identified as the optimum, proceeding with a 7 trend solution
+
+```{r}
+dat.z <- zscore(dfa_isptnorm)
+
+big.maxit.cntl.list <- list(minit = 20, maxit = 50, allow.degen = FALSE)
+model.list <- list(m = 7, R = "diagonal and unequal")
+the.fit <- MARSS(dat.z, model = model.list, form = "dfa", control = big.maxit.cntl.list)
+
+# set R = 0
+
+# get the inverse of the rotation matrix
+Z.est <- coef(the.fit, type = "matrix")$Z
+H.inv <- 1
+if (ncol(Z.est) > 1) H.inv <- varimax(coef(the.fit, type = "matrix")$Z)$rotmat
+
+# rotate factor loadings
+Z.rot <- Z.est %*% H.inv
+# rotate trends
+trends.rot <- solve(H.inv) %*% the.fit$states
+
+
+```
+
+```{r}
+# plot the factor loadings
+spp <- rownames(dat.z)
+minZ <- 0.05
+m <- dim(trends.rot)[1]
+ylims <- c(-1.1 * max(abs(Z.rot)), 1.1 * max(abs(Z.rot)))
+#par(mfrow = c(ceiling(m / 2), 1), mar = c(3, 4, 1.5, 0.5), oma = c(0.4, 1, 1, 1))
+for (i in 1:m) {
+
+  plot(c(1:N.ts)[abs(Z.rot[, i]) > minZ], as.vector(Z.rot[abs(Z.rot[, i]) > minZ, i]),
+type = "h", lwd = 2, xlab = "", ylab = "", xaxt = "n", ylim = ylims, xlim = c(0, N.ts + 1)
+)
+for (j in 1:N.ts) {
+if (Z.rot[j, i] > minZ) {
+text(j, -0.05, spp[j], srt = 90, adj = 1, cex = 0.9)
+}
+if (Z.rot[j, i] < -minZ) {
+text(j, 0.05, spp[j], srt = 90, adj = 0, cex = 0.9)
+}
+abline(h = 0, lwd = 1, col = "gray")
+} # end j loop
+mtext(paste("Factor loadings on trend", i, sep = " "), side = 3, line = .5)
+} # end i loop
+```
+Exploring each compound's max loading
+```{r}
+compounds_loadings_isnormnorm <- data.frame(cbind(Compound.Name = spp, Z.rot))
+
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+
+
+```
+
+
+Visulaizing trends
+
+
+```{r}
+
+trends.plot <- t(trends.rot)
+
+r_date <- bt_sum_bloom3$r_date
+
+chla <- bt_sum_bloom3$Extracted_Chla
+
+hb <- bt_sum_bloom3$Bulk_HB
+
+trends.plot.isnormptnorm.df <- as.data.frame(trends.plot)
+trends.plot.isnormptnorm.df <- cbind(r_date, trends.plot.isnormptnorm.df, chla, hb)
+trends.plot.isnormptnorm.df.just.trends <- trends.plot.isnormptnorm.df %>% 
+  dplyr::select(-chla, -hb)
+
+maxV3 = max(trends.plot.isnormptnorm.df$V3, na.rm = TRUE)
+maxchla = max(trends.plot.isnormptnorm.df$chla, na.rm = TRUE)
+maxhb = max(trends.plot.isnormptnorm.df$hb, na.rm = TRUE)
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  #geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  # geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  # geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  # geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+
+
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiodegraded, Anthropogenic/Biogenic mix \n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nPerturbed Contaminants\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nAnthropogenic Persistent\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  geom_line(aes(x = r_date, y = V5, color = "Factor 5\nUnknown\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V6, color = "Factor 6\nBiologically Enhanced\n"))+
+  # geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+trends.plot.isnormptnorm.df %>% 
+  ggplot()+
+  #geom_line(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  # geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  # geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  # geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  #geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  # geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 100\nMost Abundant SeaScape Submicron SSA Organics")
+
+
+# plotting figure 6 
+
+
+# trends.plot.isnormptnorm.df %>% 
+#   ggplot()+
+#   geom_point(aes(x = r_date, y = chla))
+#   geom_line(aes(x = r_date, y = V1, color = "Factor 1"))+
+#   geom_line(aes(x = r_date, y = V2), color = "orange")+
+#   geom_line(aes(x = r_date, y = V3), color = "yellow")+
+#   geom_line(aes(x = r_date, y = V4), color = "green")+
+#   geom_line(aes(x = r_date, y = V5), color = "blue")+
+#   geom_line(aes(x = r_date, y = V6), color = "purple")+
+#   geom_line(aes(x = r_date, y = V7), color = "black")+
+#   geom_point(aes(x = r_date, y = hb/420000, color = "Het_Bact"), color = "red")
+
+trends.plot.df.isnormptnorm.cor <- trends.plot.df %>% 
+  dplyr::select(-r_date)
+
+cov_factors_isnormptnorm.dfa <- data.frame(cor(trends.plot.df.isnormptnorm.cor, use ="pairwise.complete.obs"))
+```
+
+
+```{r}
+# Setting floor: must be in > 20% of samples for time series analysis
+pct_floor = 20
+
+all.comp_zscor_params2 <- M_t_analyte_withIS %>%
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_vol_ptnorm = mean(vol_is_normnorm_ptnorm, na.rm = TRUE), sd_vol_ptnorm = sd(vol_is_normnorm_ptnorm, na.rm = TRUE)) %>% 
+  filter(!is.na(sd_vol_ptnorm)) %>% 
+  dplyr::select(Compound.Name, mean_vol_ptnorm, sd_vol_ptnorm)
+
+all.comp_zscor_params2_infreq <- M_t_analyte_withIS %>%
+  filter(pct_of_samp <= pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_vol_ptnorm = mean(vol_is_normnorm_ptnorm, na.rm = TRUE), sd_vol_ptnorm = sd(vol_is_normnorm_ptnorm, na.rm = TRUE)) %>% 
+  filter(!is.na(sd_vol_ptnorm)) %>% 
+  dplyr::select(Compound.Name, mean_vol_ptnorm, sd_vol_ptnorm) %>% 
+  left_join(compiled_comp_info)
+
+
+forcorr_allcomp.zscore.long2 <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  left_join(all.comp_zscor_params2, by = "Compound.Name") %>% 
+  filter(!is.na(sd_vol_ptnorm)) %>% 
+  mutate(zscore.isnormnorm = (vol_is_normnorm_ptnorm-mean_vol_ptnorm)/sd_vol_ptnorm) %>% 
+  dplyr::select(Compound.Name, r_date, zscore.isnormnorm)
+
+forcorr_allcomp.zscore.long2 <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  left_join(all.comp_zscor_params2, by = "Compound.Name") %>% 
+  filter(!is.na(sd_vol_ptnorm)) %>% 
+  mutate(zscore.isnormnorm = (vol_is_normnorm_ptnorm-mean_vol_ptnorm)/sd_vol_ptnorm) %>% 
+  dplyr::select(Compound.Name, r_date, zscore.isnormnorm)
+
+tolycheck <- forcorr_allcomp.zscore.long2t %>% 
+  filter(Compound.Name == "20200803_0949_blob_766_")
+tolycheck %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_line()
+
+tolycheck %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm))+
+  geom_line()
+
+
+forcorr_allcomp.zscore2 <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  left_join(all.comp_zscor_params2, by = "Compound.Name") %>% 
+  filter(!is.na(sd_vol_ptnorm)) %>% 
+  mutate(zscore.isnormnorm = (vol_is_normnorm_ptnorm-mean_vol_ptnorm)/sd_vol_ptnorm) %>% 
+  dplyr::select(Compound.Name, r_date, zscore.isnormnorm) %>% 
+  spread(Compound.Name, zscore.isnormnorm, fill = NA) %>% 
+  right_join(trends.plot.isnormptnorm.df.just.trends, by = "r_date") %>% 
+  dplyr::select(-r_date)
+
+corr_allcomp.zscore2 <- data.frame(cor(forcorr_allcomp.zscore2, use ="pairwise.complete.obs"))
+
+just_factor_corr2 <- corr_allcomp.zscore2 %>% 
+  dplyr::select(V1, V2, V3, V4, V5, V6, V7) 
+
+assignments2 <- colnames(just_factor_corr2)[apply(just_factor_corr2,1,which.max)]
+
+just_factor_corr2$best_corr <- assignments2
+
+factor_corr_dfa2 <- just_factor_corr2 %>% 
+  rownames_to_column(var = "Compound.Name") %>% 
+  filter(Compound.Name != "V1") %>% 
+  filter(Compound.Name != "V2") %>%
+  filter(Compound.Name != "V3") %>% 
+  filter(Compound.Name != "V4") %>% 
+  filter(Compound.Name != "V5") %>% 
+  filter(Compound.Name != "V6") %>% 
+  filter(Compound.Name != "V7") 
+
+# factor 1= B, 2 = F, 3 = D, 4 = E, 5 = G, 6 = A, 7 = C
+
+factor_corr_dfa.justbest2 <- factor_corr_dfa2 %>% 
+  dplyr::select(Compound.Name, best_corr)
+
+dfa_factor_keys2 <- data.frame(best_corr = c("V1", "V2", "V3", "V4", "V5", "V6", "V7"), dfa_key = c("B) Biodegraded, Anthropogenic/\nBiogenic mix (factor 1)", "F) Perturbed Contaminants (factor 2)", "D) Anthropogenic Rapid Decay", "E) Anthropogenic Persistent (factor 4)", "g) Unknown", "A) Biologically Enhanced (factor 6)", "C) Anthropogenic, Biodegraded (factor 7)"))
+
+dfa_factor_keys2_nonum <- data.frame(best_corr = c("V1", "V2", "V3", "V4", "V5", "V6", "V7"), dfa_key_nonum = c("B) Semivolatiles, Biodegraded", "F) Perturbed Contaminants", "D) Anthropogenic Rapid Decay", "E) Anthropogenic Persistent", "G) Unknown", "A) Biologically Enhanced", "C) Anthropogenic, Biodegraded"))
+
+M_t_analyte_withIS_dfacor2 <- M_t_analyte_withIS %>% 
+  left_join(factor_corr_dfa.justbest2) %>% 
+  left_join(dfa_factor_keys2) %>% 
+  left_join(dfa_factor_keys2_nonum)
+
+
+# with factor numbers included
+M_t_analyte_withIS_dfacor2 %>% 
+  ggplot(aes(fill = dfa_key, x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_bar(position = "fill", stat = "identity")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab("Fraction of Submicron SSA Organics")+
+  xlab("")+
+  ggtitle("Submicron SSA Organic Signal Segregated by Source Factor")+
+  scale_fill_manual(values=c("green3", "purple3", "grey20", "orange1", "red4" , "grey 30", "white"))
+
+M_t_analyte_withIS_dfacor2 %>% 
+  ggplot(aes(fill = dfa_key_nonum, x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_bar(position = "fill", stat = "identity")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab("Fraction of Submicron SSA Organics")+
+  xlab("")+
+  ggtitle("Submicron SSA Organic Signal Segregated by Source Factor")+
+  scale_fill_manual(values=c("green3", "purple3", "grey20", "orange1", "red4" , "grey 30", "white"))
+
+M_t_analyte_withIS_dfacor2 %>% 
+  ggplot(aes(fill = dfa_key, x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_bar(position = "stack", stat = "identity")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab("Fraction of Submicron SSA Organics")+
+  xlab("")+
+  ggtitle("Submicron SSA Organic Signal Segregated by DFA Factor")+
+  scale_fill_manual(values=c("green3", "purple3", "grey20", "orange1", "blue4" , "darkgreen", "purple4"))
+
+# quantifying turnover
+
+first_day <- M_t_analyte_withIS_dfacor2 %>% 
+  filter(Filter_num== "UCB19_A_153") %>% 
+  arrange(desc(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(rank = row_number()) %>% 
+  mutate(cum_vol = vol_is_rawnorm_ptnorm) %>% 
+  mutate(cum_pct = vol_is_rawnorm_ptnorm/sum(vol_is_rawnorm_ptnorm))%>% 
+  mutate(pct_first = cum_pct)
+
+for(i in 2:nrow(first_day)){
+  first_day$cum_vol[i]= first_day$cum_vol[i]+first_day$cum_vol[i-1]
+  first_day$cum_pct[i]= first_day$cum_pct[i]+first_day$cum_pct[i-1]
+}
+
+first_day_top75 <- first_day %>% 
+  filter(cum_pct <.75) %>% 
+  dplyr::select(Compound.Name, pct_first)
+
+last_day <- M_t_analyte_withIS_dfacor2 %>% 
+  filter(Filter_num== "UCB19_A_197") %>% 
+  arrange(desc(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(rank = row_number()) %>% 
+  mutate(cum_vol = vol_is_rawnorm_ptnorm) %>% 
+  mutate(cum_pct = vol_is_rawnorm_ptnorm/sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_last = cum_pct)
+
+for(i in 2:nrow(last_day)){
+  last_day$cum_vol[i]= last_day$cum_vol[i]+last_day$cum_vol[i-1]
+  last_day$cum_pct[i]= last_day$cum_pct[i]+last_day$cum_pct[i-1]
+}
+
+last_day_top75 <- last_day %>% 
+  filter(cum_pct <.75) %>% 
+  dplyr::select(Compound.Name, pct_last)
+
+first_last <- inner_join(last_day_top75, first_day_top75)
+
+sum(first_last$pct_first)
+  
+
+
+
+
+
+```
+
+
+```{r}
+dfa_comp_assignments2 <- factor_corr_dfa2 %>% 
+  left_join(compiled_comp_info)
+
+dfa_comp_assignments2.V1 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V1") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# lots of ketones- should check this not sure if makes sense
+
+dfa_comp_assignments2.V2 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V2") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# organic acids- this one does not make a whole lot of sense, perturbed contaminants I guess
+
+dfa_comp_assignments2.V3 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V3") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# sunscreen!
+
+dfa_comp_assignments2.V4 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V4") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# cyclic and oxygenated, looks anthropogenic persistent, not really a big part of mass so dont worry about it
+
+dfa_comp_assignments2.V5 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V5") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+
+# weirt time series, weird compounds in it, but almost none of the normalized signal so dont worry about it
+
+dfa_comp_assignments2.V6 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V6") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+# factor 6 representative compounds: dimethyl quinoline
+# also biodegradation products of anthropogenics
+
+dfa_comp_assignments2.V7 <- dfa_comp_assignments %>% 
+  filter(best_corr == "V7") %>% 
+  arrange(desc(Library.Match.Factor_NISTmain))
+
+# factor 7 representative compounds: Oil signature, benzothiazoles, PAH's
+
+```
+plotting representative compounds
+
+```{r, fig.width=10.5, fig.height=4}
+bio_markers1 <- bt_sum_bloom3 %>% 
+  dplyr::select(Event_label, r_date, Event_lab_order) %>% 
+  filter(!is.na(Event_label)) %>% 
+  mutate(biomarker_mag= 4)
+
+bio_markers2 <- bt_sum_bloom3 %>% 
+  dplyr::select(Event_label, r_date, Event_lab_order) %>% 
+  filter(!is.na(Event_label)) %>% 
+  mutate(biomarker_mag= -2)
+
+bio_markers <- rbind(bio_markers1, bio_markers2)
+
+# bio_markers <- bio_markers %>% 
+#   mutate(Event_label = factor(Event_label, levels = c("")))
+
+
+
+# anthropogenic: Benzene, p-diacetyl-, 20200803_1535_blob_936_; sugar, 20200803_1535_blob_1000_; 	20200803_1535_blob_769_ 
+# note: these are semivolatile- important potentially
+
+
+# for(i in 1:nrow(dfa_comp_assignments.V1)){
+# t1 = dfa_comp_assignments.V1$Compound.Name[i]
+# 
+# print(t1)
+# 
+# factor1_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+#   filter(Compound.Name == t1)
+# 
+# f40 <-factor1_exampletseries %>% 
+#   ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+#   geom_line()
+# 
+# print(f40)
+# 
+# }
+
+factor1_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+   filter(Compound.Name == "20200803_1535_blob_936_")
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V1, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor1_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "p-Diacetyl Benzene,\nSemivolatile\nAnthropogenic"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("purple3", "magenta3"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor B: Semivolatile Biodegraded")+
+  ylim(-3, 6)
+
+# now factor 2- perterbed stuff, palmitic acid a good example
+
+factor2_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_1535_blob_106_fb")
+
+factor2_exampletseries %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+  geom_line()
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V2, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor2_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "Palmitic Acid,\nHandling Contaminant"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("grey20", "lightsteelblue4"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor F: Perturbed Contaminants")+
+  ylim(-3, 6)
+
+# now factor 3, anthropogenic rapid decay
+
+factor3_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_1535_blob_2_")
+
+factor3_exampletseries %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+  geom_line()
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V3, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor3_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "Homosalate,\nSunscreen Component"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("orange1", "gold2"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor D: Anthropogenic Rapid Decay")+
+  ylim(-3, 6)
+
+# now factor 4: persistent anthropogenitc
+
+factor4_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_0949_blob_1063_")
+
+factor4_exampletseries %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+  geom_line()
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V4, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor4_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "2,5-cyclohexadien-1-one,\n 2,6-bis(1,1-dimethylethyl)\n-4-hydroxy-4-methyl-\nBenzene Derivative"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("red4", "coral2"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor E: Anthropogenic Persistent")+
+  ylim(-3, 6)
+
+
+# now factor 5:  Unknown
+
+factor5_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_1535_blob_1421_")
+
+# factor5_exampletseries %>% 
+#   ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+#   geom_line()
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V5, color = "DFA Factor Time Series"))+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor5_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "Gamma Dodecalactone\nFood Additive"))+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor G: Unknown")+
+  ylim(-3, 6)
+
+
+# now factor 6:  Biogenically enhanced
+
+# for(i in 1:nrow(dfa_comp_assignments2.V6)){
+#   
+#   compoundnamet <- dfa_comp_assignments.V6$Compound.Name[i]
+#   
+# dfa_comp_assignments2.V6 <- dfa_comp_assignments.V6 %>% 
+#   left_join(SeaScape_normalized_cumsum)
+# 
+# factor6_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+#   filter(Compound.Name == compoundnamet)
+# 
+# f66 <- factor6_exampletseries %>%
+#   ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+#   geom_line()
+# 
+# print(f66)
+# 
+# }
+
+# compound 1: 20200803_0949_blob_766_ anthropogenic breakdown product, 	2-o-Tolylbenzothiazole benzothiazole; 20200803_0949_blob_620_, biogenic monoterpene oxidation product
+
+factor6_exampletseries1 <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_0949_blob_766_")
+
+tolycheck <- M_t_analyte_withIS %>% 
+  filter(Compound.Name == "20200803_0949_blob_766_")
+
+factor6_exampletseries1 %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm))+
+  geom_line()
+
+
+tolycheck %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+  geom_line()
+  
+
+factor6_exampletseries2 <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_0949_blob_620_")
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V6, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor6_exampletseries1, aes(x = r_date, y = zscore.isnormnorm, color = "Tolylbenzothiazole,\nAnthropogenic\nBiodegradation \nProduct"), size = 1.2)+
+  geom_line(data = factor6_exampletseries2, aes(x = r_date, y = zscore.isnormnorm, color = "Monoterpene\nOxidation Product"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom\nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("green3", "cyan4", "darkred"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor A: Biogenically Enhanced")+
+  ylim(-3, 6)
+
+
+# now factor 7: anthropogenitc biodegrading
+
+factor7_exampletseries <- forcorr_allcomp.zscore.long2 %>% 
+  filter(Compound.Name == "20200803_1535_blob_619_oil")
+
+factor3_exampletseries %>% 
+  ggplot(aes(x = r_date, y = zscore.isnormnorm, color = Compound.Name))+
+  geom_line()
+
+ 
+ggplot()+
+  geom_line(data = trends.plot.isnormptnorm.df, aes(x = r_date, y = V7, color = "DFA Factor Time Series"), size = 1.2)+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_lab_order), width = 10000)+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  # geom_line(data=trends.plot.isnormptnorm.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  geom_line(data = factor7_exampletseries, aes(x = r_date, y = zscore.isnormnorm, color = "Oil- Aliphatic"), size = 1.2)+
+  theme_bw()+
+  theme(legend.title = element_blank(), legend.text = element_text(size = 12), axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 16), plot.title = element_text(size = 18, hjust = .5))+
+  scale_fill_manual(values = c("darkgreen", "green1", "blue1"), labels = c("Outside Bloom \nAddition", "Peak Chlorophyll", "Peak Bacteria"))+
+  scale_color_manual(values=c("black", "pink4"))+
+  ylab("Dynamic Factor Analysis\nFactors (Z-scored)")+
+  xlab("")+
+  ggtitle("Factor C: Anthropogenic Biodegraded")+
+  ylim(-3, 6)
+
+
+
+
+
+
+
+
+```
+
+## Now trying with smoothed long data frame
+
+```{r}
+bt_lab <- bt_sum_bloom3 %>% 
+  dplyr::select(r_date, Filter_num)
+M_t_analyte_withIS_smoothed <- M_t_analyte_withIS %>% 
+  filter(pct_of_samp > pct_floor) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm) %>%
+  spread(Compound.Name, vol_is_normnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_normnorm_ptnorm", -r_date) %>% 
+  arrange(r_date) %>% 
+  arrange(Compound.Name) %>% 
+  mutate(vol_is_normnorm_ptnorm_smooth = vol_is_normnorm_ptnorm) %>% 
+  left_join(bt_lab)
+
+for(i in 2:nrow(M_t_analyte_withIS_smoothed)){
+
+  a = i-1
+  b = i
+  c = i+1
+  n1 <- M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm[a]
+ n2 <- M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm[b]
+ n3 <- M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm[c]
+ 
+ 
+  
+  if(M_t_analyte_withIS_smoothed$Filter_num[i] == "UCB19_A_153"){
+    M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm_smooth[i]= n2
+  }else if(M_t_analyte_withIS_smoothed$Filter_num[i] == "UCB19_A_197"){
+    M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm_smooth[i]= n2
+  }else{
+    nn <- (n1+n2+n3)/3
+    M_t_analyte_withIS_smoothed$vol_is_normnorm_ptnorm_smooth[i]<- nn
+    
+  }
+    
+    
+}
+  
+tt <- M_t_analyte_withIS_smoothed[21867,]
+
+
+```
+
+
+
+
+```{r}
+n_obs <- 75
+n_factors <- 5
+
+SeaScape_normalized_cumsum <- SeaScape_normalized_cumsum %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+cumsum_keep <- SeaScape_normalized_cumsum[1:n_obs,] 
+
+cumsum_keep <- cumsum_keep %>% 
+  mutate(keep = 1) %>% 
+  dplyr::select(Compound.Name, keep)
+
+for(i in 1:75){
+  comp = SeaScape_normalized_cumsum$Compound.Name[i]
+  
+  ss <- M_t_analyte_withIS_smoothed %>% 
+    filter(Compound.Name == comp)
+  
+  bbbb <- ss %>% 
+    ggplot()+
+    geom_line(aes(x = r_date, y = vol_is_normnorm_ptnorm), color = "red")+
+    geom_line(aes(x = r_date, y = vol_is_normnorm_ptnorm_smooth), color = "blue")
+  
+  print(bbbb)
+  
+}
+
+just_ispt_smoothed_norm <- M_t_analyte_withIS_smoothed %>% 
+  left_join(cumsum_keep) %>% 
+  filter(keep == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_smooth) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm_smooth, fill = 0) %>% 
+  dplyr::select(-r_date)
+
+M_t_analyte_withIS_smoothed %>% 
+  left_join(cumsum_keep) %>% 
+  arrange(keep) %>% 
+  arrange(r_date) %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = keep)) +
+    geom_col()
+
+M_t_analyte_withIS_smoothed %>% 
+  left_join(cumsum_keep) %>% 
+  arrange(keep) %>% 
+  arrange(r_date) %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = keep)) +
+    geom_bar(position="fill", stat="identity")
+
+
+dfa_isptnorm_smooth <- t(just_ispt_smoothed_norm)
+
+N.ts <- nrow(dfa_isptnorm_smooth)
+TT <- ncol(dfa_isptnorm_smooth)
+
+Sigma <- sqrt(apply(dfa_isptnorm_smooth, 1, var, na.rm = TRUE))
+y.bar <- apply(dfa_isptnorm_smooth, 1, mean, na.rm = TRUE)
+dat.z <- (dfa_isptnorm_smooth - y.bar) * (1 / Sigma)
+rownames(dat.z) <- rownames(dfa_isptnorm_smooth)
+
+zmat <- matrix(NA, nrow = n_obs, ncol = n_factors)
+
+for(i in 1:n_obs){
+  for(j in 1:n_factors){
+    if(j>i){
+      zmat[i,j] = 0
+    }else{
+      zmat[i,j]= paste("z", i, j, sep = "")
+    }
+  }
+  
+}
+
+
+Q <- B <- diag(1, n_factors)
+
+rmat <- matrix(NA, nrow = n_obs, ncol = n_obs)
+
+for(i in 1:n_obs){
+  row_i = i
+  
+  for(j in 1:n_obs){
+    col_j = j
+    
+    if(col_j == row_i){
+      rmat[i,j]= paste("r", i, j, sep = "")
+    }else{
+      rmat[i,j]= 0
+    }
+    
+  }
+  
+}
+
+x0 <- U <- A <- "zero"
+
+V0 <- diag(n_obs, n_factors)
+```
+
+```{r}
+dat.z <- zscore(dfa_isptnorm_smooth)
+
+big.maxit.cntl.list <- list(minit = 20, maxit = 50, allow.degen = FALSE)
+model.list <- list(m = 7, R = "diagonal and unequal")
+the.fit <- MARSS(dat.z, model = model.list, form = "dfa", control = big.maxit.cntl.list)
+
+# set R = 0
+
+# get the inverse of the rotation matrix
+Z.est <- coef(the.fit, type = "matrix")$Z
+H.inv <- 1
+if (ncol(Z.est) > 1) H.inv <- varimax(coef(the.fit, type = "matrix")$Z)$rotmat
+
+# rotate factor loadings
+Z.rot <- Z.est %*% H.inv
+# rotate trends
+trends.rot <- solve(H.inv) %*% the.fit$states
+
+```
+
+
+```{r}
+r_date <- bt_sum_bloom3$r_date
+trends.plot.isnormptnorm.smooth.df <- as.data.frame(trends.plot)
+trends.plot.isnormptnorm.smooth.df <- cbind(r_date, trends.plot.isnormptnorm.smooth.df, chla, hb)
+
+trends.plot.isnormptnorm.smooth.df.just.trends <- trends.plot.isnormptnorm.df %>% 
+  dplyr::select(-chla, -hb)
+
+maxV3 = max(trends.plot.isnormptnorm.smooth.df$V3, na.rm = TRUE)
+maxchla = max(trends.plot.isnormptnorm.smooth.df$chla, na.rm = TRUE)
+maxhb = max(trends.plot.isnormptnorm.smooth.df$hb, na.rm = TRUE)
+
+trends.plot.isnormptnorm.smooth.df %>% 
+  ggplot(aes(x = r_date, y = V1, color = "Factor 1 \nBiology Associated\n"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = V2, color = "Factor 2 \nAnthropogenic Persistent\n"))+
+  geom_line(aes(x = r_date, y = V3, color = "Factor 3 \nAnthropogenic Rapid Decay\n"), size = 1.2)+
+  geom_line(aes(x = r_date, y = V4, color = "Factor 4 \nBacteria Associated\n"))+
+  geom_line(aes(x = r_date, y = V5, color = "Factor 5\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V6, color = "Factor 6\nChlorophyll Associated\n"))+
+  geom_line(aes(x = r_date, y = V7, color = "Factor 7\nAnthropogenic, Biodegraded\n"))+
+  geom_line(data=trends.plot.isnormptnorm.smooth.df[!is.na(trends.plot.df$chla),], aes(x = r_date, y = chla*maxV3/maxchla, color = "Normalized Chlorophyll"), size = 1.2, linetype = "twodash")+
+  geom_line(data=trends.plot.isnormptnorm.smooth.df[!is.na(trends.plot.df$hb),], aes(x = r_date, y = hb*maxV3/maxhb, color = "Normalized Bacteria"), size = 1.2, linetype = "twodash")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  scale_color_manual(values=c("tan4", "grey20", "orange1", "red3", "green3", "green3", "purple 4", "red1", "green1"))+
+  ylab("Dynamic Factor Analysis Factors (Z-scored)")+
+  xlab("")+
+  ggtitle("Time Series Factors of Top 75\nMost Abundant SeaScape Submicron SSA Organics")
+```
+
+# Trying hierarchical clustering because DFA not working well
+
+```{r}
+library(tidyr)
+library(dtwclust)
+library(dplyr)
+library(ggplot2)
+#install.packages("reshape")
+library(reshape)
+```
+```{r}
+
+df <- read.table("http://kdd.ics.uci.edu/databases/synthetic_control/synthetic_control.data", 
+                 header = FALSE)
+# wide to long
+
+
+df_long <- M_t_analyte_withIS_smoothed %>% 
+  left_join(cumsum_keep) %>% 
+  filter(keep == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_normnorm_ptnorm_smooth)
+
+
+
+df_list <- as.list(utils::unstack(df_long, vol_is_normnorm_ptnorm_smooth ~ Compound.Name))
+
+df_list_z <- dtwclust::zscore(df_list)
+
+cluster_dtw_h <-list()
+for (i in 2:20)
+{
+  cluster_dtw_h[[i]] <- tsclust(df_list_z, type = "h", k = i,  distance = "dtw", control = hierarchical_control(method = "complete"), seed = 390, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+# take a look at the object
+cluster_dtw_h[[8]]
+
+plot(cluster_dtw_h[[8]], type = "sc")
+
+1
+cvi(cluster_dtw_h[[5]], type = "valid")
+cvi(cluster_dtw_h[[6]], type = "valid")
+cvi(cluster_dtw_h[[7]], type = "valid")
+cvi(cluster_dtw_h[[8]], type = "valid")
+cvi(cluster_dtw_h[[9]], type = "valid")
+
+# from this appears that 8 clusters is ideal, based on maximizing Sil
+```
+```{r}
+fit <- cluster_dtw_h[[8]]
+clustered_data <- cutree(fit, k=8)
+clustered_data_tidy <- as.data.frame(as.table(clustered_data)) %>% glimpse()
+colnames(clustered_data_tidy) <- c("Compound.Name","cluster")
+clustered_data_tidy$Compound.Name <- as.character(clustered_data_tidy$Compound.Name)
+glimpse(clustered_data_tidy)
+table(clustered_data_tidy$cluster)
+
+clustered_data_tidy <- clustered_data_tidy %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name))
+
+
+```
+
+```{r}
+smoothed_zscoreparams <- M_t_analyte_withIS_smoothed %>% 
+  group_by(Compound.Name) %>% 
+  summarise(c.mean = mean(vol_is_normnorm_ptnorm_smooth), c.stdev = sd(vol_is_normnorm_ptnorm_smooth))
+
+M_t_analyte_withIS_smoothed.zscore <- M_t_analyte_withIS_smoothed %>% 
+  left_join(smoothed_zscoreparams) %>% 
+  mutate(vol_is_normnorm_ptnorm_smooth.zscore = (vol_is_normnorm_ptnorm_smooth-c.mean)/c.stdev)
+
+
+
+```
+
+
+```{r}
+cluster_1 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 1) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_2 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 2) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_3 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 3) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_4 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 4) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_5 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 5) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_6 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 6) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_7 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 7) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_8 <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(cluster == 8) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+cluster_all <- M_t_analyte_withIS_smoothed.zscore %>%
+  left_join(clustered_data_tidy) %>% 
+  filter(!is.na(cluster)) %>% 
+  group_by(r_date, cluster) %>% 
+  summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
+
+h.clust.factors.z <- data.frame(cluster = c(1,2,3,4,5,6,7,8), cluster_factors = c("Factor A", "Factor C", "Factor E", "Factor B", "Factor D", "Factor F", "Factor G", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Mixed", "Anthropogenic", "Mixed", "Biological", "Biological", "Biological"))
+
+cluster_all %>% 
+  left_join(h.clust.factors.z) %>% 
+  ggplot(aes(x = r_date, y = cluster_vol.z, color = as.factor(cluster_factors)), size = 1.2)+
+  geom_line()+
+  geom_point(data = bt_sum_bloom3, aes(x = r_date, y = Extracted_Chla/10), color = "green1", size = 2)+
+  geom_point(data = bt_sum_bloom3, aes(x = r_date, y = Bulk_HB/3000000), color = "red1", size = 2)
+
+
+
+
+smooth_zscore_forcorr <- M_t_analyte_withIS_smoothed.zscore %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_normnorm_ptnorm_smooth.zscore) %>% 
+  spread(Compound.Name, vol_is_normnorm_ptnorm_smooth.zscore) %>% 
+  dplyr::select(-r_date)
+
+smooth_zscore_forcorr$F1 <- cluster_1$cluster_vol.z
+smooth_zscore_forcorr$F2 <- cluster_2$cluster_vol.z
+smooth_zscore_forcorr$F3 <- cluster_3$cluster_vol.z
+smooth_zscore_forcorr$F4 <- cluster_4$cluster_vol.z
+smooth_zscore_forcorr$F5 <- cluster_5$cluster_vol.z
+smooth_zscore_forcorr$F6 <- cluster_6$cluster_vol.z
+smooth_zscore_forcorr$F7 <- cluster_7$cluster_vol.z
+smooth_zscore_forcorr$F8 <- cluster_8$cluster_vol.z
+
+
+
+
+
+hclust_smooth_zscore_corr <- data.frame(cor(smooth_zscore_forcorr), use = "pairwise.complete.obs")
+
+just_cluster_corr <-  hclust_smooth_zscore_corr %>% 
+  dplyr::select(F1, F2, F3, F4, F5, F6, F7, F8) 
+
+
+assignments <- colnames(just_cluster_corr)[apply(just_cluster_corr,1,which.max)]
+
+just_cluster_corr$best_corr <- assignments
+
+cluster_corr_hclust <- just_cluster_corr %>% 
+  rownames_to_column(var = "Compound.Name") %>% 
+  filter(Compound.Name != "F1") %>% 
+  filter(Compound.Name != "F2") %>%
+  filter(Compound.Name != "F3") %>% 
+  filter(Compound.Name != "F4") %>% 
+  filter(Compound.Name != "F5") %>% 
+  filter(Compound.Name != "F6") %>% 
+  filter(Compound.Name != "F7") %>% 
+  filter(Compound.Name != "F8") %>% 
+  left_join(clustered_data_tidy)
+
+table(cluster_corr_hclust$best_corr)
+
+cluster_corr_infor <- cluster_corr_hclust %>% 
+  left_join(compiled_comp_info)
+
+```
+
+```{r, fig.width = 10, fig.height = 2}
+maxh <- max(cluster_all$cluster_vol.z)
+minh <- min(cluster_all$cluster_vol.z)
+
+
+hclust_anthro <- cluster_all %>% 
+  left_join(h.clust.factors.z) %>% 
+  filter(cluster_factors == "Factor A" | cluster_factors == "Factor B")
+
+pan<- ggplot()+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
+  geom_line(data = hclust_anthro, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
+  theme_bw()+
+  ylab("Factor Abundance\n(Z-Scored)")+
+  ggtitle("Anthropogenic Influence Factors")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5),legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  #ylim(minh, maxh)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  xlab("")+
+  #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
+  scale_color_manual(values = cols[1:2])+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c( "Peak Chla", "Peak Bacteria"))+
+  guides(fill = guide_legend(order = 1),color = guide_legend(order = 2))
+
+pan
+
+
+hclust_mix <- cluster_all %>% 
+  left_join(h.clust.factors.z) %>% 
+  filter(cluster_factors == "Factor C" | cluster_factors == "Factor D"| cluster_factors == "Factor E")
+
+pmix<- ggplot()+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
+  geom_line(data = hclust_mix, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
+  theme_bw()+
+  ylab("Factor Abundance\n(Z-Scored)")+
+  ggtitle("Mixed Influence Factors")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  #ylim(minh, maxh)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  xlab("")+
+  #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
+  scale_color_manual(values = cols[3:5])+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chla", "Peak Bacteria"))
+
+pmix
+
+
+hclust_bio <- cluster_all %>% 
+  left_join(h.clust.factors.z) %>% 
+  filter(cluster_factors == "Factor F" | cluster_factors == "Factor G"| cluster_factors == "Factor H")
+
+pbio<- ggplot()+
+  geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
+  geom_line(data = hclust_bio, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
+  theme_bw()+
+  ylab("Factor Abundance\n(Z-Scored)")+
+  ggtitle("Biological Influence Factors")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  #ylim(minh, maxh)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  xlab("")+
+  #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
+  scale_color_manual(values = cols[6:8])+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chla", "Peak Bacteria"))
+
+pbio
+
+
+chla_hb <- bt_sum_bloom3 %>% 
+  dplyr::select(r_date, Extracted_Chla, Bulk_HB_updated) %>% 
+  filter(!is.na(Extracted_Chla))
+
+max_chla <- max(chla_hb$Extracted_Chla)
+max_hb <- max(chla_hb$Bulk_HB_updated)
+
+chla_hb <- chla_hb %>% 
+  mutate(chla_norm = Extracted_Chla/max_chla) %>% 
+  mutate(hb_norm = Bulk_HB_updated/ max_hb)
+
+chla_hb %>% 
+  ggplot(aes(x = r_date, y = chla_norm))+
+  geom_line(color = "green3", size = 1.2)+
+  geom_line(aes(x = r_date, y = hb_norm), color = "blue2", size = 1.2)+
+  geom_col(data = bio_markers1, aes(x = r_date, y = biomarker_mag/4, fill = Event_label), width = 20000)+
+  theme_bw()+
+  ylab("Normalized Concentration")+
+  scale_fill_manual(values = c( "darkgreen", "blue4"), labels = c("Peak Chla", "Peak Bacteria"))+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_blank(), axis.title.y = element_text(size = 20))+
+  #ylim(minh, maxh)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  xlab("")
+
+chla_hb %>% 
+  ggplot(aes(x = r_date, y = chla_norm, color = "Chlorophyll A"))+
+  geom_line(size = 1.2)+
+  geom_line(aes(x = r_date, y = hb_norm, color = "Heterotrophic Bacteria"), size = 1.2)+
+  theme_bw()+
+  scale_color_manual(values = c("green3", "blue2"))+
+  ylab("Normalized Concentration")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_blank(), axis.title.y = element_text(size = 20))+
+  #ylim(minh, maxh)+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  xlab("")
+
+
+```
+
+
+
+```{r}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+n = 8
+cols = gg_color_hue(n)
+
+dev.new(width = 4, height = 4)
+plot(1:n, pch = 16, cex = 2, col = cols)
+```
+
+
+
+```{r}
+M_t_analyte_withIS.hclust <- M_t_analyte_withIS %>% 
+  left_join(cluster_corr_hclust) %>% 
+  mutate(cluster_combined = ifelse(is.na(cluster), sub('.', '', best_corr), cluster)) 
+
+hclust_factors_compinfo <- cluster_corr_hclust %>% 
+  mutate(cluster_combined = ifelse(is.na(cluster), sub('.', '', best_corr), cluster)) %>% 
+  right_join(compiled_comp_info)
+
+M_t_analyte_withIS.hclust %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = as.factor(best_corr))) +
+  geom_col(position = "fill")
+
+
+M_t_analyte_withIS.hclust %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = as.factor(cluster))) +
+  geom_col(position = "fill")
+
+h.clust.factors <- data.frame(cluster_combined = as.factor(c(1,2,3,4,5,6,7,8)), cluster_factors = c("Factor A", "Factor C", "Factor E", "Factor B", "Factor D", "Factor F", "Factor G", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Mixed", "Anthropogenic", "Mixed", "Biological", "Biological", "Biological"))
+
+M_t_analyte_withIS.hclust <- M_t_analyte_withIS.hclust %>% 
+  left_join(h.clust.factors)
+  
+
+M_t_analyte_withIS.hclust %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = cluster_factors, order = levels(cluster_combined))) +
+  geom_col(position = "fill")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  xlab("")+
+  ylab("Fraction Submicron Organic Signal")+
+  theme(legend.text = element_text(size = 14), legend.title = element_blank(), axis.text.x = element_text(size = 14), axis.text.y = element_text(size = 14), axis.title.y = element_text(size = 16))+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+
+M_t_analyte_withIS.hclust %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = cluster_factors, order = levels(cluster_combined))) +
+  geom_col(position = "stack")
+
+
+
+
+cluster_corr_hclust.5 <- cluster_corr_hclust %>% 
+  filter(best_corr == "F5") %>% 
+  left_join(compiled_comp_info)
+```
+
+M_t_analyte_withIS_dfacor %>% 
+  ggplot(aes(fill = dfa_key, x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm))+
+  geom_bar(position = "fill", stat = "identity")+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab("Fraction of Submicron SSA Organics")+
+  xlab("")+
+  ggtitle("Submicron SSA Organic Signal Segregated by Source Factor")+
+  scale_fill_manual(values=c("purple3", "grey20", "orange1", "blue4", "green3", "darkgreen", "purple4"))
+
+
+
+```{r}
+for(i in 1:nrow(cluster_corr_hclust.5)){
+  cc <- cluster_corr_hclust.5$Compound.Name[i]
+  
+  fff <- M_t_analyte_withIS %>% 
+    filter(Compound.Name == cc) %>% 
+    ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, color = Compound.Name))+
+    geom_line()
+  
+  print(fff)
+  
+}
+
+
+```
+
+
+```{r}
+
+summary(SeaScape_normalized_cumsum$isnormnormptnorm_cumsum)
+
+M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum) %>% 
+  left_join(h.clust.factors) %>% 
+  filter(isnormnormptnorm_cumsum > 8562) %>% 
+  ggplot(aes(x = cluster_factors, y = Library.Match.Factor_NISTmain, fill = cluster_factors))+
+  geom_violin()
+
+ttt <- M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum_cumulative) %>% 
+  left_join(h.clust.factors) %>% 
+  filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
+  group_by(Compound.Name, cluster_factors) %>% 
+  summarise(la = 1)
+
+table(ttt$cluster_factors)
+
+M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum_cumulative) %>% 
+  left_join(h.clust.factors) %>% 
+  filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
+  ggplot(aes(x = cluster_factors, y = Library.Match.Factor_NISTmain, fill = cluster_factors))+
+  geom_boxplot()+
+  theme_bw()+
+  ylab("NIST Mass Spectral\nMatch Factor")+
+  xlab("")+
+  theme(axis.text.x = element_text(size = 16, angle = -45, vjust = .2, hjust = .5), axis.text.y = element_text(size = 16), axis.title.y = element_text(size = 18))
+
+library("DescTools")
+
+NIST_summaries.hclust <- M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum_cumulative) %>% 
+  left_join(h.clust.factors) %>% 
+  filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
+  mutate(rounded_nist= RoundTo(Library.Match.Factor_NISTmain, 10)) %>% 
+  group_by(rounded_nist, cluster_factors) %>% 
+  summarise(nist_normalized_signal_pct = sum(isnormnormptnorm_pct))
+
+cumulative_signal_byfactor <- NIST_summaries.hclust %>% 
+  group_by(cluster_factors) %>% 
+  summarise(total_factor_signal = sum(nist_normalized_signal_pct))
+
+NIST_summaries.hclust <- NIST_summaries.hclust %>% 
+  left_join(cumulative_signal_byfactor) %>% 
+  mutate(normalized_nistbinned_signal = nist_normalized_signal_pct / total_factor_signal)
+
+NIST_summaries.hclust %>% 
+  ggplot(aes(x = rounded_nist, y = nist_normalized_signal_pct, fill = cluster_factors))+
+  geom_col()
+
+M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum_cumulative) %>% 
+  left_join(h.clust.factors) %>% 
+  filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
+  mutate(rounded_nist= RoundTo(Library.Match.Factor_NISTmain, 25))
+  ggplot(aes(x = log(isnormnormptnorm_pct), y = Library.Match.Factor_NISTmain, color = cluster_factors))+
+  geom_point()
+
+M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  ggplot(aes(x = cluster_combined, y = LRI.I.x, fill = cluster_combined))+
+  geom_violin()
+
+M_t_analyte_withIS.hclust %>% 
+  left_join(compiled_comp_info, by = "Compound.Name") %>% 
+  left_join(SeaScape_normalized_cumsum) %>% 
+  ggplot(aes(x = cluster_combined, y = LRI.I.x, fill = cluster_combined))+
+  geom_violin()
+
+# personal care products
+M_t_analyte_withIS.hclust.1 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 1)
+
+# early perturbed- possibly bio related, spiky
+M_t_analyte_withIS.hclust.2 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 2)
+
+# possibly bio related decreases then increasesan
+M_t_analyte_withIS.hclust.3 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 3)
+
+# anthro biodegrades- oil typical
+M_t_analyte_withIS.hclust.4 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 4)
+
+# lots of s containing things- interesting
+M_t_analyte_withIS.hclust.5 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 5)
+
+
+#biolog accumulating- breakdown products
+M_t_analyte_withIS.hclust.6 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 6)
+
+# biogenic things
+M_t_analyte_withIS.hclust.7 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 7)
+
+# more biogenic things
+M_t_analyte_withIS.hclust.8 <- M_t_analyte_withIS.hclust %>%
+  left_join(compiled_comp_info, by = "Compound.Name") %>%
+  filter(cluster_combined == 8)
+
+
+
+```
+
+
+```{r}
+
+
+
+
+
+
+```
+
+
+# Idea for mass spec quant modeling: train ML (based only on mass spectrum) on residuals from linear modeling based on date and GCxGC location 
+
+
+
 
 
 
