@@ -774,6 +774,7 @@ chamber_terp_iop1_anthrotrace.m <- chamber_terp_iop1_anthrotrace %>%
 chamber_terp_iop2_anthrotrace.m <- chamber_terp_iop2_anthrotrace %>% 
   left_join(just_a2.m)
 
+
 p22 <- chamber_terp_iop1_anthrotrace.m %>% 
   filter(Compound.Name == "1221_0832_blob_42"| Compound.Name == "1221_0832_blob_35") %>% 
   ggplot(aes(x = a1.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm/cumsum_ISrawnorm, color = Compound.Name))+
@@ -787,6 +788,55 @@ p22 <- chamber_terp_iop1_anthrotrace.m %>%
 
 
 p22
+
+
+p27 <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  filter(Compound.Name == "1221_0832_blob_42"| Compound.Name == "1221_0832_blob_35") %>% 
+  left_join(just_bb2.m, by = "r_date") %>% 
+  ggplot(aes(x = bb2.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()+
+  scale_color_discrete(name = "Monoterpene \nOxidation Products", labels = c("Unidentified Alpha Pinene\nOxidation Product", "Unidentified Limonene\nOxidation Product"))+
+  ggtitle("Monoterpene Oxidation Products \nAssociated with BB Influence")+
+  xlab("Normalized BB Tracer Signal")+
+  ylab("Normalized Monoterpene \nOxidation Product Signal")+
+  theme_bw()+
+  theme(text = element_text(size = 14))
+
+
+p27
+
+p28 <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  filter( Compound.Name == "1221_0832_blob_35") %>% 
+  left_join(just_bb2.m, by = "r_date") %>% 
+  ggplot(aes(x = bb2.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()+
+  scale_color_discrete(name = "Monoterpene \nOxidation Products", labels = c("Unidentified Alpha Pinene\nOxidation Product", "Unidentified Limonene\nOxidation Product"))+
+  ggtitle("Monoterpene Oxidation Products \nAssociated with BB Influence")+
+  xlab("Normalized BB Tracer Signal")+
+  ylab("Normalized Monoterpene \nOxidation Product Signal")+
+  theme_bw()+
+  theme(text = element_text(size = 14))
+
+
+p28
+
+p29 <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  filter(Compound.Name == "1221_0832_blob_42") %>% 
+  left_join(just_bb2.m, by = "r_date") %>% 
+  ggplot(aes(x = bb2.vol_is_rawnorm_ptnorm, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()+
+  scale_color_discrete(name = "Monoterpene \nOxidation Products", labels = c("Unidentified Alpha Pinene\nOxidation Product", "Unidentified Limonene\nOxidation Product"))+
+  ggtitle("Monoterpene Oxidation Products \nAssociated with BB Influence")+
+  xlab("Normalized Anthropogenic Tracer Signal")+
+  ylab("Normalized Monoterpene \nOxidation Product Signal")+
+  theme_bw()+
+  theme(text = element_text(size = 14))
+
+
+p29
 
 o_a_chamterp<- chamber_terp_iop1_acor %>% 
   dplyr::select(Compound.Name) %>% 
@@ -1745,7 +1795,7 @@ clustered_bb_iop2.l %>% ggplot()+
 
 Exploring what is driving the uniqueness boost
 
-```{r}
+```{r fig.width = 6, fig.height=5}
 unique_tracing_c1 <- unique_tracing_c %>% 
   filter(IOP == 1) %>% 
   dplyr::select(Compound.Name, r_date, unique.analyte, is_unique_prior, unique_log, unique_vol) %>% 
@@ -1768,7 +1818,7 @@ p2 <- ggplot()+
   geom_col(data = unique_tracing_c2, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
   ylim(0, 15)
 
-cols <- c("Urban Plume Tracer \n (not to scale)" = "black", "Biomass\n Burning Tracer"= "green")
+cols <- c("Urban Plume Tracer \n(Phthalic Acid)\n*not to scale" = "deeppink4", "Biomass\n Burning Tracer\n(Levoglucosan)\n*not to scale"= "blue4")
 
 testbb1 <- unique_tracing_c1 %>% 
   filter(Compound.Name == "1202_1412_blob_1")
@@ -1776,20 +1826,21 @@ testbb1 <- unique_tracing_c1 %>%
 p3 <- ggplot()+
   geom_col(data = unique_tracing_c1, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
   labs(fill = "Unique Compared \n To Prior Sample")+
-  geom_line(data = just_a1, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20, colour = "Urban Plume Tracer \n (not to scale)"))+
-  geom_line(data = testbb1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer"))+
+  geom_line(data = just_a1, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20, colour = "Urban Plume Tracer \n(Phthalic Acid)\n*not to scale"), size = 1.8)+
+  geom_line(data = testbb1, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer\n(Levoglucosan)\n*not to scale"), size = 1.2)+
   labs(color = "")+
   scale_color_manual(values = cols)+
-  xlab("Date")+
-  ylab("Internal Standard Normalized Signal")+
+  xlab("")+
+  ylab("Normalized Organic Signal")+
   ggtitle("Drivers of Wet Season Compositional Variability")+
   
-  scale_fill_discrete(name="Common\nCompared\nto Prior Sample",
-                         labels=c("Common", "Unique"))+
+  scale_fill_discrete(name="",
+                         labels=c("In Prior Sample", "Not In Prior Sample"))+
   theme_bw()+
-  theme(legend.position="bottom")+
   guides(col = guide_legend(order = 2),fill = guide_legend(order = 1))+
-  xlim(unique_tracing_c1.m$r_date[25], unique_tracing_c1.m$r_date[54])
+  scale_x_datetime(date_breaks = "3 day", labels = date_format("%b %d"), limits = c(unique_tracing_c1.m$r_date[25], unique_tracing_c1.m$r_date[54]))+
+  theme(axis.text.x = element_text(angle = 25, vjust = 1.0, hjust = 1.0))
+
 
 p3
 
@@ -1813,7 +1864,8 @@ just_bb2 <- M_t_analyte_unique_IS_na2 %>%
 
 test <- unique_tracing_c2 %>% 
   group_by(r_date) %>% 
-  summarise(tot_normvol = sum(vol_is_rawnorm_ptnorm, na.rm = TRUE))
+  summarise(tot_normvol = sum(vol_is_rawnorm_ptnorm, na.rm = TRUE)) %>% 
+  mutate(r_date.d = as.Date(r_date))
 
 test %>% ggplot(aes(x = r_date, y = tot_normvol))+
   geom_point()
@@ -1822,25 +1874,30 @@ testbb2 <- unique_tracing_c2 %>%
   filter(Compound.Name == "1202_1412_blob_1")
 
 p5 <- ggplot()+
+  # geom_col(data = IOP2_filtertimes_tod, aes(x = r_date, y = 15, fill = D_N))+
+  # scale_fill_manual("Time Of Day", values = c("D" = "lightyellow2", "N" = "grey70"))+
+  # labs("")+
   geom_col(data = unique_tracing_c2, aes(x = r_date, y = vol_is_rawnorm_ptnorm, fill = unique_log))+
   labs(fill = "Unique Compared \n To Prior Sample")+
-  geom_line(data = just_a2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*40, colour = "Urban Plume Tracer \n (not to scale)"))+
-  geom_line(data = testbb2, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer"))+
+  geom_line(data = just_a2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*40, colour = "Urban Plume Tracer \n(Phthalic Acid)\n*not to scale"), size = 1.2)+
+  geom_line(data = testbb2, aes(x = r_date, y = vol_is_rawnorm_ptnorm/3, colour = "Biomass\n Burning Tracer\n(Levoglucosan)\n*not to scale"), size = 1.8)+
   labs(color = "")+
   scale_color_manual(values = cols)+
   ggtitle("Drivers of Dry Season Compositional Variability")+
-  xlab("Date")+
-  ylab("Internal Standard Normalized Signal")+
+  xlab("")+
+  ylab("Normalized Organic Signal")+
   ggtitle("Drivers of Dry Season Compositional Variability")+
-  scale_fill_discrete(name="Common\nCompared\nto Prior Sample",
-                         labels=c("Common", "Unique"))+
+  scale_fill_discrete(name="",
+                         labels=c("In Prior Sample", "Not In Prior Sample"))+
   theme_bw()+
-  theme(legend.position="bottom")+
   guides(col = guide_legend(order = 2),fill = guide_legend(order = 1))+
   ylim(0, 15)+
-  xlim(unique_tracing_c2.m$r_date[31],unique_tracing_c2.m$r_date[108])
-
+  scale_x_datetime(date_breaks = "3 day", labels = date_format("%b %d"), limits = c(unique_tracing_c2.m$r_date[31],unique_tracing_c2.m$r_date[108]))+
+  theme(axis.text.x = element_text(angle = 25, vjust = 1.0, hjust = 1.0))
+  #xlim(unique_tracing_c2.m$r_date[31],unique_tracing_c2.m$r_date[108])
 p5
+
+
 
 just_a1.m <- just_a1_na %>% 
   mutate(a1.vol_is_rawnorm_ptnorm = vol_is_rawnorm_ptnorm) %>% 
@@ -1879,24 +1936,24 @@ names(unique_tracing_c2.m) <- make.names(names(unique_tracing_c2.m), unique = TR
 p6 <- unique_tracing_c1.m %>% 
   #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
   ggplot()+
-  geom_point(aes(x = a1.vol_is_rawnorm_ptnorm, y = TRUE.), color = "blue", size = 2, shape = 17)+
-  xlab("Internal Standard Normalized \nUrban Plume Tracer")+
-  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
-  annotate("text", x = .01, y = 1.5, label = "Urban Tracer \nr = .845", size = 7)+
+  geom_point(aes(x = a1.vol_is_rawnorm_ptnorm/max(a1.vol_is_rawnorm_ptnorm), y = TRUE.), size = 2, shape = 17)+
+  xlab("Normalized Urban Plume \nTracer Signal")+
+  ylab("Normalized Organic Signal \n(Not in Prior Sample)")+
+  annotate("text", x = .3, y = 1.5, label = "Urban Tracer \nr = .845", size = 7)+
   theme_bw()+
-  theme(text = element_text(size = 18))
+  theme(text = element_text(size = 18), axis.title.x=element_text(colour= "deeppink4"), axis.title.y=element_text(color= "lightseagreen"))
 
 p6
 
 p10 <- unique_tracing_c1.m %>% 
   #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
   ggplot()+
-  geom_point(aes(x = bb1.vol_is_rawnorm_ptnorm, y = TRUE.), color = "black", fill = "green", size = 2, shape = 24)+
-  xlab("Internal Standard Normalized \nBiomass Burning Tracer")+
-  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
-  annotate("text", x = .2, y = 1.5, label = "Biomass Burning Tracer \nr = .344", size = 7)+
+  geom_point(aes(x = bb1.vol_is_rawnorm_ptnorm/max(bb1.vol_is_rawnorm_ptnorm), y = TRUE.), size = 2, shape = 17)+
+  xlab("Normalized Biomass Burning \nTracer Signal")+
+  ylab("Normalized Organic Signal \n(Not in Prior Sample)")+
+  annotate("text", x = .3, y = 1.5, label = "Biomass Burning Tracer \nr = .344", size = 7)+
   theme_bw()+
-  theme(text = element_text(size = 18))
+  theme(text = element_text(size = 18), axis.title.x=element_text(colour= "blue4"), axis.title.y=element_text(color= "lightseagreen"))
 
 p10
 
@@ -1913,24 +1970,25 @@ unique_tracing_c2.m %>%
 p8 <- unique_tracing_c2.m %>% 
   #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
   ggplot()+
-  geom_point(aes(x = a2.vol_is_rawnorm_ptnorm, y = TRUE.), color = "blue", size = 2, shape = 17)+
-  xlab("Internal Standard Normalized \nUrban Plume Tracer")+
-  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
-  annotate("text", x = 300, y = 4, label = "Urban Tracer \nr = .093", size = 7)+
+  geom_point(aes(x = a2.vol_is_rawnorm_ptnorm/max(a2.vol_is_rawnorm_ptnorm), y = TRUE.), size = 2, shape = 17)+
+  xlab("Normalized Urban Plume \nTracer Signal")+
+  ylab("Normalized Organic Signal \n(Not in Prior Sample)")+
+  annotate("text", x = .3, y = 4, label = "Urban Tracer \nr = .093", size = 7)+
   theme_bw()+
-  theme(text = element_text(size = 18))
+  theme(text = element_text(size = 18), axis.title.x=element_text(colour= "deeppink4"), axis.title.y=element_text(color= "lightseagreen"))
 
 p8
 
 p9 <- unique_tracing_c2.m %>% 
   #filter(a1.vol_is_rawnorm_ptnorm >0) %>% 
   ggplot()+
-  geom_point(aes(x = bb2.vol_is_rawnorm_ptnorm, y = TRUE.), color = "black", fill = "green", size = 2, shape = 24)+
-  xlab("Internal Standard Normalized \nBiomass Burning Plume Tracer")+
-  ylab("Heterogenaity Indicator \n(Normalized Unique \nCompound Signal)")+
-  annotate("text", x = 75000, y = 4, label = "Biomass Burning \nTracer r = .693", size = 7)+
+  geom_point(aes(x = bb2.vol_is_rawnorm_ptnorm/max(bb2.vol_is_rawnorm_ptnorm), y = TRUE.), size = 2, shape = 17)+
+  xlab("Normalized Biomass Burning \nTracer Signal")+
+  ylab("Normalized Organic Signal \n(Not in Prior Sample)")+
+  annotate("text", x = .3, y = 4, label = "Biomass Burning \nTracer r = .693", size = 7)+
   theme_bw()+
-  theme(text = element_text(size = 18))
+  theme(text = element_text(size = 18), axis.title.x=element_text(color= "blue4"), axis.title.y=element_text(color= "lightseagreen"))
+
 
 p9
 
@@ -1970,9 +2028,43 @@ p7
 #   scale_fill_manual(name = "Unique Compared\n to Previous Sample", values=c("blue", "green"))
 
 
+date_testing <- M_t_analyte_unique_IS %>% 
+  group_by(r_date) %>% 
+  summarise(vol_ptnorm = sum(Volume/Punch_num_sample_time_norm), volisnormptnorm = sum(vol_is_rawnorm_ptnorm), IOP = mean(IOP))
 
+date_testing_season <- date_testing %>% 
+  group_by(IOP) %>% 
+  summarise(mean_vol = mean(vol_ptnorm), med_vol = median(vol_ptnorm))
+
+date_testing %>% 
+  ggplot(aes(x = r_date, y = vol_ptnorm))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = volisnormptnorm*10000), color = "red")
+
+date_testing %>% 
+  filter(IOP ==1) %>% 
+  ggplot(aes(x = r_date, y = vol_ptnorm))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = volisnormptnorm*10000), color = "red")
+  
+date_testing %>% 
+  filter(IOP ==2) %>% 
+  ggplot(aes(x = r_date, y = vol_ptnorm))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = volisnormptnorm*10000), color = "red")
 ```
 
+```{r}
+p6
+
+p8
+
+p10
+
+p9
+
+
+```
 
 
 

@@ -1,0 +1,247 @@
+---
+title: "SeaScape_VOCs"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r libs, message = FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+
+library(scales)
+
+library(akima)
+#library(asbio)
+#library(tmap)         # raster + vector layers
+#library(raster)       # Main raster library
+#library(tidyverse)    # our old friend
+#library(sf)           # to work with simple features data
+#library(mapview)
+library(openxlsx)
+library(class)
+library(RANN)
+library("survival")
+library("Hmisc")
+
+library(MARSS)
+library(utils)
+
+
+#install.packages("survival")
+
+library(lattice)
+#install.packages("latticeExtra")
+
+
+library(survival)
+library(Hmisc)
+library(lubridate)
+#install.packages("installr")
+#library(installr)
+```
+
+
+```{r timeline_import, message=FALSE, warning=FALSE}
+bt_sum_voc <- read_csv("Blob_table_summary_CAICE_VOC.csv") %>% 
+  filter(Usable == T)
+
+
+
+bt_sum_voc <- bt_sum_voc %>% mutate(r_date =    mdy_hm(Sample_Time)) 
+
+make_file_namevoc <- function(file_num) {
+  file_start <- ""
+  file_end <- ".csv"
+  full_name <- paste(file_start,file_num,file_end, sep = "")
+  return(full_name)
+  
+}
+
+read_bt_filesvoc <- function(fi_name_short) {
+  
+  fi_name <- make_file_namevoc(fi_name_short)
+  temp_bt <<- read_csv(file = fi_name)
+  temp_bt <- temp_bt %>% mutate(Sample_Number = fi_name_short)
+  temp_bt <<- temp_bt
+  return(temp_bt)
+}
+
+make_massive_tablevoc <- function(summary_table){
+ 
+  M <- read_bt_filesvoc(as.character(summary_table$Sample_Number[1]))
+
+  for(i in 2:length(summary_table$Sample_Number)){
+    t <- read_bt_filesvoc(as.character(summary_table$Sample_Number[i]))
+    Mnew <- rbind(M, t)
+    M <- Mnew
+    print(i)
+  }
+  M_t <<- M
+}
+
+make_massive_tablevoc(bt_sum_voc)
+
+
+M_t_full_voc <- M_t %>% 
+  left_join(bt_sum_voc, by = "Sample_Number") %>% 
+  mutate(Volume_amt_sampled_norm = Volume/amt_sampled_cm3) %>% 
+  dplyr::select(-(X12:X21))
+
+names(M_t_full_voc) <- make.names(names(M_t_full_voc),unique = TRUE) 
+
+
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+Match_factor_floor <- 750
+Reverse_match_factor_floor <- 100
+LRI_diff_floor <- 6
+
+
+
+
+rt2_floor <- .2 # note: check on this, but for purposes of indexing retention times in 2d this is important
+
+# creating a column of the differences in linear retention indecies so that poor matches can be screened out
+M_t_LRI_voc <- M_t_full_voc %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>% 
+  mutate(LRI_diff = replace_na(LRI_diff, -999))
+
+
+for(i in 1:nrow(M_t_LRI_voc)){
+  
+  descrip <- M_t_LRI_voc$Description[i]
+  if (is.na(descrip)){
+    next
+  } else if (descrip == "benzothiazole"){
+     M_t_LRI_voc$Compound.Name[i] <- "benzothiazole"
+  } else{
+    next
+  }
+  
+}
+
+btzs_voc <- M_t_LRI_voc %>% 
+  filter(Compound.Name == "benzothiazole")
+
+  
+
+M_t_all_analytes_voc <- M_t_LRI_voc 
+
+
+
+
+
+  
+M_t_analyte_unique_voc <- M_t_all_analytes_voc %>% 
+  arrange((r_date)) %>% 
+  filter(LRI_diff < LRI_diff_floor) %>% 
+  filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "benzothiazole") %>% 
+  #filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
+  arrange(desc(Volume)) %>% 
+  arrange(Compound.Name) %>% 
+  arrange(r_date) %>% 
+  distinct(Compound.Name, r_date, .keep_all = TRUE) 
+
+
+
+```
+
+
+# SOA focus
+
+```{r}
+Compiled_comp_info_SOA <- read_csv("Compiled_Compound_info_CAICE_VOC_SOAfocus.csv") %>% 
+  dplyr::select(-(X17:X21)) %>% 
+  mutate(is_SOA = 1) %>% 
+  filter(Real_TS == "TRUE")
+
+M_t_analyte_unique_voc.soa <- M_t_analyte_unique_voc %>% left_join(Compiled_comp_info_SOA, by = "Compound.Name") %>% 
+  filter(is_SOA == 1)
+
+voc_quantfactors.soa <- read_csv("Quant_Factors_CAICE_VOC_SOA.csv")
+
+
+M_t_analyte_unique_voc.soa.qf1 <- M_t_analyte_unique_voc.soa %>% 
+  filter(Quant_category == 2) %>% 
+  left_join(voc_quantfactors.soa) %>% 
+  mutate(ng_cm3 = Volume_amt_sampled_norm*(1/Quant_Factor_1)) %>% 
+  mutate(ng_cm3_yield = ng_cm3 * SOA_Yield)
+
+soameanconc <- M_t_analyte_unique_voc.soa.qf1 %>% 
+  filter(Sample_Number != "g57") %>% 
+  group_by(Compound.Name) %>% 
+  summarise(ng_cm3.mean = mean(ng_cm3, na.rm = TRUE), ng_cm3_yield.mean = mean(ng_cm3_yield, na.rm = TRUE)) %>% 
+  arrange(desc(ng_cm3_yield.mean)) 
+
+soameanconc <- tibble::rownames_to_column(soameanconc, "rank_soa")
+
+M_t_analyte_unique_voc.soa.qf1.r <- M_t_analyte_unique_voc.soa.qf1 %>% 
+  left_join(soameanconc) %>% 
+  filter(ng_cm3_yield.mean > .000008)
+
+
+M_t_analyte_unique_voc.soa.qf1.r %>% 
+  filter(Sample_Number != "g57") %>%
+  ggplot(aes(x = r_date, y = ng_cm3, fill = Compound.Name.NISTmain))+
+  geom_col(position = "stack")+
+  ylab("Dome VOC Concentrations, ng/cm3")
+
+M_t_analyte_unique_voc.soa.qf1.r %>% 
+  filter(Sample_Number != "g57") %>%
+  ggplot(aes(x = r_date, y = ng_cm3_yield, fill = Compound.Name.NISTmain))+
+  geom_col(position = "stack")+
+  ylab("SOA predicted from VOC Concentrations, ng/cm3")
+
+M_t_analyte_unique_voc.soa.qf1.r %>% 
+  ggplot(aes(x = r_date, y = ng_cm3, fill = Compound.Name.NISTmain))+
+  geom_col(position = "fill")+
+  ylab("Fraction VOC Mass with SOA Formation Potential")
+
+M_t_analyte_unique_voc.soa.qf1.r %>% 
+  ggplot(aes(x = r_date, y = ng_cm3_yield, fill = Compound.Name.NISTmain))+
+  geom_col(position = "fill")+
+  ylab("SOA from Identified \nPrecursors")
+
+# M_t_analyte_unique_voc.soa.qf1 %>% 
+#   filter(rank_soa < 11) %>% 
+#   ggplot(aes(x = r_date, y = ng_cm3, color = Compound.Name))+
+#   geom_line()+
+#   ylim(0, .005)
+
+for(i in 1:nrow(soameanconc)){
+  
+  comp_temp <- soameanconc$Compound.Name[i]
+  
+  t_1 <- M_t_analyte_unique_voc.soa.qf1 %>% 
+    filter(Compound.Name == comp_temp) %>% 
+    filter(Sample_Number != "g57") %>% 
+    ggplot(aes(x = r_date, y = ng_cm3))+
+  geom_line()+
+    ggtitle(comp_temp)+
+    ylim(0, NA)
+  
+  print(t_1)
+    
+  
+}
+
+
+
+```
+
+
+
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

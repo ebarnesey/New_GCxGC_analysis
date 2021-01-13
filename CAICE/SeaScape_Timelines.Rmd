@@ -2286,15 +2286,15 @@ forcorr_allcomp.zscore.long2 <- M_t_analyte_withIS %>%
   mutate(zscore.isnormnorm = (vol_is_normnorm_ptnorm-mean_vol_ptnorm)/sd_vol_ptnorm) %>% 
   dplyr::select(Compound.Name, r_date, zscore.isnormnorm)
 
-tolycheck <- forcorr_allcomp.zscore.long2t %>% 
-  filter(Compound.Name == "20200803_0949_blob_766_")
-tolycheck %>% 
-  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
-  geom_line()
+# tolycheck <- forcorr_allcomp.zscore.long2 %>% 
+#   filter(Compound.Name == "20200803_0949_blob_766_")
+# tolycheck %>% 
+#   ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm))+
+#   geom_line()
 
-tolycheck %>% 
-  ggplot(aes(x = r_date, y = zscore.isnormnorm))+
-  geom_line()
+# tolycheck %>% 
+#   ggplot(aes(x = r_date, y = zscore.isnormnorm))+
+#   geom_line()
 
 
 forcorr_allcomp.zscore2 <- M_t_analyte_withIS %>% 
@@ -2930,9 +2930,9 @@ library(reshape)
 ```
 ```{r}
 
-df <- read.table("http://kdd.ics.uci.edu/databases/synthetic_control/synthetic_control.data", 
-                 header = FALSE)
-# wide to long
+# df <- read.table("http://kdd.ics.uci.edu/databases/synthetic_control/synthetic_control.data", 
+#                  header = FALSE)
+# # wide to long
 
 
 df_long <- M_t_analyte_withIS_smoothed %>% 
@@ -2946,16 +2946,23 @@ df_list <- as.list(utils::unstack(df_long, vol_is_normnorm_ptnorm_smooth ~ Compo
 
 df_list_z <- dtwclust::zscore(df_list)
 
+set.seed(20)
 cluster_dtw_h <-list()
 for (i in 2:20)
 {
-  cluster_dtw_h[[i]] <- tsclust(df_list_z, type = "h", k = i,  distance = "dtw", control = hierarchical_control(method = "complete"), seed = 390, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+  cluster_dtw_h[[i]] <- tsclust(df_list_z, type = "h", k = i,  distance = "dtw", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
 }
 
 # take a look at the object
 cluster_dtw_h[[8]]
 
 plot(cluster_dtw_h[[8]], type = "sc")
+plot(cluster_dtw_h[[7]], type = "sc")
+plot(cluster_dtw_h[[6]], type = "sc")
+plot(cluster_dtw_h[[5]], type = "sc")
+plot(cluster_dtw_h[[4]], type = "sc")
+plot(cluster_dtw_h[[3]], type = "sc")
+
 
 1
 cvi(cluster_dtw_h[[5]], type = "valid")
@@ -3050,7 +3057,7 @@ cluster_all <- M_t_analyte_withIS_smoothed.zscore %>%
   group_by(r_date, cluster) %>% 
   summarise(cluster_vol.z = mean(vol_is_normnorm_ptnorm_smooth.zscore))
 
-h.clust.factors.z <- data.frame(cluster = c(1,2,3,4,5,6,7,8), cluster_factors = c("Factor A", "Factor C", "Factor E", "Factor B", "Factor D", "Factor F", "Factor G", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Mixed", "Anthropogenic", "Mixed", "Biological", "Biological", "Biological"))
+h.clust.factors.z <- data.frame(cluster = c(1,2,3,4,5,6,7,8), cluster_factors = c("Factor A", "Factor C", "Factor B", "Factor G", "Factor D", "Factor F", "Factor E", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Anthropogenic", "Biological", "Mixed", "Biological", "Mixed", "Biological"))
 
 cluster_all %>% 
   left_join(h.clust.factors.z) %>% 
@@ -3109,7 +3116,7 @@ cluster_corr_infor <- cluster_corr_hclust %>%
 
 ```
 
-```{r, fig.width = 10, fig.height = 2}
+```{r}
 maxh <- max(cluster_all$cluster_vol.z)
 minh <- min(cluster_all$cluster_vol.z)
 
@@ -3122,19 +3129,23 @@ pan<- ggplot()+
   geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
   geom_line(data = hclust_anthro, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
   theme_bw()+
-  ylab("Factor Abundance\n(Z-Scored)")+
-  ggtitle("Anthropogenic Influence Factors")+
-  theme(plot.title = element_text(size = 18, hjust = 0.5),legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  ylab("Mean Cluster Abundance\n(Z-Scored)")+
+  ggtitle("Anthropogenic Influence Clusters")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5),legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 18))+
   #ylim(minh, maxh)+
   scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
   xlab("")+
   #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
-  scale_color_manual(values = cols[1:2])+
-  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c( "Peak Chla", "Peak Bacteria"))+
+  scale_color_manual(values = cols[1:2], labels = c("Anthropogenic A", "Anthropogenic B"))+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c( "Peak Chlorophyll", "Peak Bacteria"))+
   guides(fill = guide_legend(order = 1),color = guide_legend(order = 2))
 
 pan
 
+png("anthro_clusters.png", width=8, height=5,
+    units="in", res=600, pointsize=12)
+pan
+dev.off()
 
 hclust_mix <- cluster_all %>% 
   left_join(h.clust.factors.z) %>% 
@@ -3144,17 +3155,22 @@ pmix<- ggplot()+
   geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
   geom_line(data = hclust_mix, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
   theme_bw()+
-  ylab("Factor Abundance\n(Z-Scored)")+
-  ggtitle("Mixed Influence Factors")+
-  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  ylab("Mean Cluster Abundance\n(Z-Scored)")+
+  ggtitle("Mixed Influence Clusters")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 18))+
   #ylim(minh, maxh)+
   scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
   xlab("")+
   #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
-  scale_color_manual(values = cols[3:5])+
-  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chla", "Peak Bacteria"))
+  scale_color_manual(values = cols[3:5], labels = c("Mixed A", "Mixed B", "Mixed C"))+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chlorophyll", "Peak Bacteria"))
 
 pmix
+
+png("mixed_clusters.png", width=8, height=5,
+    units="in", res=600, pointsize=12)
+pmix
+dev.off()
 
 
 hclust_bio <- cluster_all %>% 
@@ -3165,17 +3181,22 @@ pbio<- ggplot()+
   geom_col(data = bio_markers, aes(x = r_date, y = biomarker_mag, fill = Event_label), width = 20000)+
   geom_line(data = hclust_bio, aes(x = r_date, y = cluster_vol.z, color = cluster_factors), size = 1.2)+
   theme_bw()+
-  ylab("Factor Abundance\n(Z-Scored)")+
-  ggtitle("Biological Influence Factors")+
-  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 20))+
+  ylab("Mean Cluster Abundance\n(Z-Scored)")+
+  ggtitle("Biogenic Influence Clusters")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18), axis.title.y = element_text(size = 18))+
   #ylim(minh, maxh)+
   scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
   xlab("")+
   #guides(fill=guide_legend(nrow=2,byrow=TRUE))+
-  scale_color_manual(values = cols[6:8])+
-  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chla", "Peak Bacteria"))
+  scale_color_manual(values = cols[6:8], labels = c("Biogenic A", "Biogenic B", "Biogenic C"))+
+  scale_fill_manual(values = c("darkgreen", "blue4"), labels = c("Peak Chlorophyll", "Peak Bacteria"))
 
 pbio
+
+png("biogenic_clusters.png", width=8, height=5,
+    units="in", res=600, pointsize=12)
+pbio
+dev.off()
 
 
 chla_hb <- bt_sum_bloom3 %>% 
@@ -3202,17 +3223,23 @@ chla_hb %>%
   scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
   xlab("")
 
-chla_hb %>% 
+chlaplot <- chla_hb %>% 
   ggplot(aes(x = r_date, y = chla_norm, color = "Chlorophyll A"))+
   geom_line(size = 1.2)+
   geom_line(aes(x = r_date, y = hb_norm, color = "Heterotrophic Bacteria"), size = 1.2)+
   theme_bw()+
-  scale_color_manual(values = c("green3", "blue2"))+
-  ylab("Normalized Concentration")+
-  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_blank(), axis.title.y = element_text(size = 20))+
+  scale_color_manual(values = c("darkgreen", "blue4"), labels = c("Chlorophyll-a", "Heterotrophic \nBacteria"))+
+  ylab("Bulk Water Concentration\n (Normalized)")+
+  ggtitle("Algal Bloom Biological Indicators")+
+  theme(plot.title = element_text(size = 18, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_blank(), axis.text.x = element_text(size = 18), axis.text.y = element_blank(), axis.title.y = element_text(size = 18))+
   #ylim(minh, maxh)+
   scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
   xlab("")
+
+png("Chlorophyll_hb.png", width=8, height=5,
+    units="in", res=600, pointsize=12)
+chlaplot
+dev.off()
 
 
 ```
@@ -3252,21 +3279,31 @@ M_t_analyte_withIS.hclust %>%
   ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = as.factor(cluster))) +
   geom_col(position = "fill")
 
-h.clust.factors <- data.frame(cluster_combined = as.factor(c(1,2,3,4,5,6,7,8)), cluster_factors = c("Factor A", "Factor C", "Factor E", "Factor B", "Factor D", "Factor F", "Factor G", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Mixed", "Anthropogenic", "Mixed", "Biological", "Biological", "Biological"))
+h.clust.factors <- data.frame(cluster_combined = as.factor(c(1,2,3,4,5,6,7,8)), cluster_factors = c("Factor A", "Factor C", "Factor B", "Factor G", "Factor D", "Factor F", "Factor E", "Factor H"), cluster_factor_types = c("Anthroporenic", "Mixed", "Anthropogenic", "Biological", "Mixed", "Biological", "Mixed", "Biological"))
+
+
 
 M_t_analyte_withIS.hclust <- M_t_analyte_withIS.hclust %>% 
   left_join(h.clust.factors)
   
 
-M_t_analyte_withIS.hclust %>% 
+carbon_pool <- M_t_analyte_withIS.hclust %>% 
   ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = cluster_factors, order = levels(cluster_combined))) +
   geom_col(position = "fill")+
   theme_bw()+
-  theme(legend.title = element_blank())+
   xlab("")+
-  ylab("Fraction Submicron Organic Signal")+
-  theme(legend.text = element_text(size = 14), legend.title = element_blank(), axis.text.x = element_text(size = 14), axis.text.y = element_text(size = 14), axis.title.y = element_text(size = 16))+
-  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))
+  ylab("Fraction Submicron \nOrganic Signal")+
+  ggtitle("Submicron Sea Spray Aerosol \n Carbon Pool Dynamics")+
+  theme(plot.title = element_text(size = 18, hjust = .5), legend.text = element_text(size = 14), legend.title=element_text(size=14), axis.text.x = element_text(size = 14), axis.text.y = element_text(size = 14), axis.title.y = element_text(size = 16))+
+  scale_x_datetime(date_breaks = "6 days", labels = date_format("%b %d"))+
+  scale_fill_discrete(name = "Cluster", labels = c("Anthropogenic A", "Anthropogenic B", "Mixed A", "Mixed B", "Mixed C", "Biogenic A", "Biogenic B", "Biogenic C"))
+
+carbon_pool
+
+png("carbon_pool.png", width=8, height=5,
+    units="in", res=600, pointsize=12)
+carbon_pool
+dev.off()
 
 M_t_analyte_withIS.hclust %>% 
   ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, fill = cluster_factors, order = levels(cluster_combined))) +
@@ -3280,15 +3317,15 @@ cluster_corr_hclust.5 <- cluster_corr_hclust %>%
   left_join(compiled_comp_info)
 ```
 
-M_t_analyte_withIS_dfacor %>% 
-  ggplot(aes(fill = dfa_key, x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm))+
-  geom_bar(position = "fill", stat = "identity")+
-  theme_bw()+
-  theme(legend.title = element_blank())+
-  ylab("Fraction of Submicron SSA Organics")+
-  xlab("")+
-  ggtitle("Submicron SSA Organic Signal Segregated by Source Factor")+
-  scale_fill_manual(values=c("purple3", "grey20", "orange1", "blue4", "green3", "darkgreen", "purple4"))
+
+What is actually in each cluster
+```{r}
+
+c1 <- 
+
+
+```
+
 
 
 
@@ -3366,14 +3403,14 @@ NIST_summaries.hclust %>%
   ggplot(aes(x = rounded_nist, y = nist_normalized_signal_pct, fill = cluster_factors))+
   geom_col()
 
-M_t_analyte_withIS.hclust %>% 
-  left_join(compiled_comp_info, by = "Compound.Name") %>% 
-  left_join(SeaScape_normalized_cumsum_cumulative) %>% 
-  left_join(h.clust.factors) %>% 
-  filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
-  mutate(rounded_nist= RoundTo(Library.Match.Factor_NISTmain, 25))
-  ggplot(aes(x = log(isnormnormptnorm_pct), y = Library.Match.Factor_NISTmain, color = cluster_factors))+
-  geom_point()
+# M_t_analyte_withIS.hclust %>% 
+#   left_join(compiled_comp_info, by = "Compound.Name") %>% 
+#   left_join(SeaScape_normalized_cumsum_cumulative) %>% 
+#   left_join(h.clust.factors) %>% 
+#   filter(isnormnorm_ptnorm_pct_cumulative < .9) %>% 
+#   mutate(rounded_nist= RoundTo(Library.Match.Factor_NISTmain, 25))
+#   ggplot(aes(x = log(isnormnormptnorm_pct), y = Library.Match.Factor_NISTmain, color = cluster_factors))+
+#   geom_point()
 
 M_t_analyte_withIS.hclust %>% 
   left_join(compiled_comp_info, by = "Compound.Name") %>% 
@@ -3434,7 +3471,73 @@ M_t_analyte_withIS.hclust.8 <- M_t_analyte_withIS.hclust %>%
 
 ```{r}
 
+clusters_compID <- cluster_corr_infor %>% 
+  mutate(cluster_combined = ifelse(is.na(cluster), sub('.', '', best_corr), cluster)) %>% 
+  left_join(h.clust.factors) %>% 
+  left_join(SeaScape_normalized_cumsum)
 
+# personal care products, homosalate important
+clustersAid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor A") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+# dimethylheptadecane, oils
+clustersBid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor B") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+# palmitic acid, maybe contamination
+clustersCid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor C") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+# definitely a mix of things
+clustersDid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor D") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+# total mystery but theres not much of it so qho cares
+clustersEid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor E") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+
+
+# a lot of this looks antho tbh, but gonna focus on 	Cyclooctasiloxane, hexadecamethyl-, which is reported in marine cyanobacteria and looks biogenic from time series
+clustersFid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor F") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+M_t_analyte_withIS_smoothed %>% 
+  filter(Compound.Name == "20200803_1535_blob_453_") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_smooth))+
+  geom_line()
+
+M_t_analyte_withIS_smoothed %>% 
+  filter(Compound.Name == "20200803_1535_blob_23_fb") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_smooth))+
+  geom_line()
+
+M_t_analyte_withIS_smoothed %>% 
+  filter(Compound.Name == "20200803_0949_blob_786_") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_smooth))+
+  geom_line()
+
+# dimethyl quinoline and trimethyl quinoline, previously reported intercellylar algae components
+clustersGid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor G") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+# alcohol components of previously reported macroalgae
+# also linalool oxide, reported in red algae
+clustersHid <- clusters_compID %>% 
+  filter(cluster_factors== "Factor H") %>% 
+  arrange(desc(isnormnormptnorm_cumsum))
+
+M_t_analyte_withIS_smoothed %>% 
+  filter(Compound.Name == "20200803_0949_blob_715_oil") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_smooth))+
+  geom_line()
 
 
 
