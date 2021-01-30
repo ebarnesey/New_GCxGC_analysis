@@ -470,7 +470,7 @@ compiled_comp_info %>%
   labs(fill = "",
        x = NULL,
        y = NULL) + 
-  ggtitle("765 Novel and Identifiable Submicron SSA Compounds- SeaScape")
+  ggtitle("765 Novel and Identifiable\nSubmicron SSA Compounds- SeaScape")
 
 ```
 
@@ -2928,6 +2928,8 @@ library(ggplot2)
 #install.packages("reshape")
 library(reshape)
 ```
+
+
 ```{r}
 
 # df <- read.table("http://kdd.ics.uci.edu/databases/synthetic_control/synthetic_control.data", 

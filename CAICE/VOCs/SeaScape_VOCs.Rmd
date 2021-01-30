@@ -89,8 +89,8 @@ make_massive_tablevoc(bt_sum_voc)
 
 M_t_full_voc <- M_t %>% 
   left_join(bt_sum_voc, by = "Sample_Number") %>% 
-  mutate(Volume_amt_sampled_norm = Volume/amt_sampled_cm3) %>% 
-  dplyr::select(-(X12:X21))
+  mutate(Volume_amt_sampled_norm = Volume/amt_sampled_cm3) 
+  #dplyr::select(-(X12:X21))
 
 names(M_t_full_voc) <- make.names(names(M_t_full_voc),unique = TRUE) 
 
@@ -146,11 +146,13 @@ M_t_analyte_unique_voc <- M_t_all_analytes_voc %>%
   arrange(desc(Volume)) %>% 
   arrange(Compound.Name) %>% 
   arrange(r_date) %>% 
-  distinct(Compound.Name, r_date, .keep_all = TRUE) 
+  distinct(Compound.Name, r_date, .keep_all = TRUE) %>% 
+  mutate(volume_norm_rough = Volume/(amt_sampled_cm3*Quant_category))
 
 
 
 ```
+
 
 
 # SOA focus
@@ -234,6 +236,40 @@ for(i in 1:nrow(soameanconc)){
 
 
 ```
+Rough timelines
+
+```{r}
+voc_names_vols <- M_t_analyte_unique_voc %>% 
+  group_by(Compound.Name) %>% 
+  summarise(mean_vol_roughnorm = mean(volume_norm_rough)) %>% 
+  arrange(desc(mean_vol_roughnorm))
+
+voc.tseries.0filled <- M_t_analyte_unique_voc %>% 
+  dplyr::select(Compound.Name, r_date, volume_norm_rough) %>% 
+  spread(Compound.Name, volume_norm_rough, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "volume_norm_rough", -r_date) %>% 
+  left_join(bt_sum_voc)
+
+for(i in 1:nrow(voc_names_vols)){
+  
+  cname <- voc_names_vols$Compound.Name[i]
+  
+  tempt <- voc.tseries.0filled %>% 
+    filter(Compound.Name == cname)  
+    
+  
+  ptemp <- tempt %>% 
+    ggplot(aes(x = r_date, y = volume_norm_rough, color = T_O_D))+
+    geom_point()+
+    ggtitle(cname)
+  
+  print(ptemp)
+  
+}
+
+
+```
+
 
 
 

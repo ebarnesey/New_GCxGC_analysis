@@ -36,6 +36,9 @@ library(lattice)
 #install.packages("latticeExtra")
 
 
+library(plyr)
+library(quantreg)
+
 library(survival)
 library(Hmisc)
 library(lubridate)
@@ -89,7 +92,7 @@ make_massive_table(bt_sum_mdom)
 M_t_full_mdom <- M_t %>% 
   left_join(bt_sum_mdom, by = "File_num") 
 
-names(M_t_full_mdom) <- make.names(names(M_t_full),unique = TRUE) 
+names(M_t_full_mdom) <- make.names(names(M_t_full_mdom),unique = TRUE) 
 
 
 
@@ -158,7 +161,7 @@ M_t_all_analytes <- M_t_LRI_mdom %>%
   anti_join(IS_goodmatch_mdom) %>% 
   #anti_join(FB_okmatch) %>% 
   anti_join(IS_okmatch) %>% 
-  anti_join(remove_match) %>% 
+  #anti_join(remove_match) %>% 
   anti_join(small_poorlymatched) %>% 
   filter(LRI.I > 1200) 
 
@@ -186,19 +189,20 @@ M_t_analyte_unique_mdom <- M_t_all_analytes %>%
 # tracking the mass of all of the analytes before bad matches are screened out for later analysis of library performance
 M_t_all_analytes_volcount <- M_t_all_analytes %>% 
   group_by(File_num) %>% 
-  summarise(rawvol = sum(Volume))
+  dplyr::summarise(rawvol = sum(Volume))
+
 
 # tracking the number of all analutes in
 M_t_all_analytes_ncount <- M_t_all_analytes %>% 
-  count(File_num) %>% 
+  dplyr::count(File_num) %>% 
   dplyr::rename(total_num_analyte = n)
 
 M_t_match_analytes_volcount <- M_t_analyte_unique_mdom %>% 
   group_by(File_num) %>% 
-  summarise(rawvol_match = sum(Volume))
+  dplyr::summarise(rawvol_match = sum(Volume))
 
 M_t_match_analytes_ncount <- M_t_analyte_unique_mdom %>% 
-  count(File_num) %>% 
+  dplyr::count(File_num) %>% 
   dplyr::rename(total_num_analyte_match = n)
 
 M_t_analyte_summary <- M_t_all_analytes_volcount %>% 
@@ -209,7 +213,7 @@ M_t_analyte_summary <- M_t_all_analytes_volcount %>%
   mutate(perct_volfound = (rawvol_match/rawvol)*100)
 
 compound_pop <- M_t_analyte_unique_mdom %>% 
-  count(Compound.Name) %>% 
+  dplyr::count(Compound.Name) %>% 
   dplyr::rename(comp.n = n) %>% 
   mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
@@ -225,12 +229,12 @@ compound_pop <- M_t_analyte_unique_mdom %>%
 #   rename(total_num_analyte = n)
 
 M_t_analyte_count <- M_t_all_analytes %>% 
-  count(File_num) %>%
+  dplyr::count(File_num) %>%
   dplyr::rename(total_num_analyte = n)
 # 
 # # counting the number of unique analytes in each image
 num_analyte_unique_mdom <- M_t_analyte_unique_mdom %>%
-  count(File_num) %>%
+  dplyr::count(File_num) %>%
   dplyr::rename(unique.analyte = n)
 
 # counting the number based percent of compounds being traced in all 
@@ -245,10 +249,10 @@ perct_comps_traced <- num_analyte_unique_mdom %>%
 summary(perct_comps_traced$pct_found)
 
 
-M_t_analyte_unique_mdom <- M_t_analyte_unique_mdom %>% left_join(num_analyte_unique)
+M_t_analyte_unique_mdom <- M_t_analyte_unique_mdom %>% left_join(num_analyte_unique_mdom)
 
 compound_pop <- M_t_analyte_unique_mdom %>% 
-  count(Compound.Name) %>% 
+  dplyr::count(Compound.Name) %>% 
   dplyr::rename(comp.n = n) %>% 
   mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
@@ -261,7 +265,7 @@ hist(compound_pop$pct_of_samp,
 
 MDOM_sample_cumsum <- M_t_analyte_unique_mdom %>% 
   group_by(File_num) %>% 
-  summarise(File_vol = sum(Volume))
+  dplyr::summarise(File_vol = sum(Volume))
 
 
 M_t_analyte_unique_mdom <- M_t_analyte_unique_mdom %>% 
@@ -273,7 +277,7 @@ M_t_analyte_unique_mdom <- M_t_analyte_unique_mdom %>%
 M_t_analyte_unique_mdom %>% 
   mutate(char_comp_n = as.integer(round(pct_of_samp, 0))) %>% 
   group_by(char_comp_n) %>% 
-  summarise(avg_vol_byn = mean(Volume)) %>% 
+  dplyr::summarise(avg_vol_byn = mean(Volume)) %>% 
   ggplot(aes(x = char_comp_n, y = avg_vol_byn)) +
   geom_col()+
   labs(title = "Average Blob Volume by Library Match Frequency")+
@@ -410,7 +414,7 @@ compiled_comp_info_mdom %>%
 mdom_cumsum_raw <- M_t_analyte_unique_mdom%>% 
   mutate(tic = 1) %>% 
   group_by(Compound.Name) %>% 
-  summarise(raw_cumsum = sum(Volume), num_obs = sum(tic)) %>% 
+  dplyr::summarise(raw_cumsum = sum(Volume), num_obs = sum(tic)) %>% 
   mutate(pct_obs = num_obs/nrow(bt_sum_mdom)) %>% 
   arrange(desc(raw_cumsum))
 
@@ -444,7 +448,7 @@ for(i in 1:nrow(compiled_comp_info_mdom.findable)){
 # note: unlike sample analytes, internal standard compounds are frequently split vertically into multiple blobs because of the high volume.  In order to account for this, I am summing all blobs together that meet the high match criteria and are very close in the first dimension.
 IS_unique_mdom <- IS_goodmatch_mdom %>% 
   group_by(Compound.Name, File_num) %>% 
-  summarise(Volume_tot = sum(Volume)) %>% 
+  dplyr::summarise(Volume_tot = sum(Volume)) %>% 
   filter(Compound.Name != "glucose-13C6") %>% 
   filter(Compound.Name != "dC14") %>% 
   filter(Compound.Name != "d-C22 acid, TMS") 
@@ -458,12 +462,12 @@ IS_tofix <- IS_unique_mdom %>%
   filter(Freq < 8) %>% 
   left_join(bt_sum_mdom, by = "File_num")
 
-IS_unique_c <- IS_unique %>% 
+IS_unique_c <- IS_unique_mdom %>% 
   mutate(tic = 1) %>% 
   group_by(File_num) %>% 
-  summarise(ticsum = sum(tic))
+  dplyr::summarise(ticsum = sum(tic))
 
-c<- data.frame(table(IS_unique$Compound.Name))
+c<- data.frame(table(IS_unique_mdom$Compound.Name))
 
 # note: this is not knitting, not sure why but did temporary work around
 IS_positions_mdom <- IS_goodmatch_mdom %>%
@@ -471,7 +475,7 @@ IS_positions_mdom <- IS_goodmatch_mdom %>%
   filter(Compound.Name != "dC14") %>%
   group_by(Compound.Name, File_num) %>%
   #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
 # 
 # IS_positions_knit <- write.csv(IS_positions, "IS.pos.knit.csv")
 
@@ -481,8 +485,8 @@ IS_positions_mdom <- IS_goodmatch_mdom %>%
 
 IS_avg_vols_toadd <- IS_unique_mdom %>% 
   group_by(Compound.Name) %>% 
-  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
-  left_join(IS_unique) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  left_join(IS_unique_mdom) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
   dplyr::select(Compound.Name, File_num, IS_mean_norm)
@@ -519,7 +523,7 @@ IS_unique_pos <- IS_unique_mdom %>%
 
 IS_positions_mdom_avg <- IS_positions_mdom %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), Retention.II..sec. = mean(RI2, na.rm = TRUE)) 
+  dplyr::summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), RI2_all = mean(RI2, na.rm = TRUE)) 
 
 
 write.csv(IS_positions_mdom_avg, "IS_positions_mdom_avg.csv")
@@ -527,11 +531,17 @@ write.csv(IS_positions_mdom_avg, "IS_positions_mdom_avg.csv")
 
 IS_avg_vols_mdom <- IS_unique_mdom %>% 
   group_by(Compound.Name) %>% 
-  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
   left_join(IS_unique_mdom) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
   left_join(bt_sum_mdom)
+
+IS_avg_vols_mdom.s <- IS_unique_mdom %>% 
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot))
+
+write.csv(IS_avg_vols_mdom.s, "IS_mean_med_vols_mdombloom3_samples2.csv")
 
 IS_cat <- read.csv("IS_withcat.csv")
 IS_cat <- IS_cat %>% 
@@ -574,11 +584,11 @@ IS_stability %>%
   geom_point()
 
 IS_stability %>% 
-  ggplot(aes(x = Retention.II..sec., y = IS_mean_norm, color = r_date))+
+  ggplot(aes(x = RI2_all, y = IS_mean_norm, color = r_date))+
   geom_point()
 
 IS_stability %>% 
-  ggplot(aes(x = Retention.II..sec., y = Volume_tot, color = r_date))+
+  ggplot(aes(x = RI2_all, y = Volume_tot, color = r_date))+
   geom_point()
 
 IS_stability %>% 
@@ -590,38 +600,39 @@ IS_stability %>%
   geom_point()
 
 IS_stability %>% 
-  ggplot(aes(x = Retention.II..sec., y = IS_mean_norm, color = F_group_cat))+
+  ggplot(aes(x = RI2_all, y = IS_mean_norm, color = F_group_cat))+
   geom_point()
 
 IS_stability %>% 
-  ggplot(aes(x = Retention.II..sec., y = Volume_tot, color = F_group_cat))+
+  ggplot(aes(x = RI2_all, y = Volume_tot, color = F_group_cat))+
   geom_point()
 ```
 
 
 ```{r IS_mapping2}
-LRI_weight = 2
+LRI_weight = 10
 LRII_weight = 1
 
 LRI1_avg = mean(IS_positions_mdom_avg$LRI_avg_all, na.rm = TRUE)
-LRI2_avg = mean(IS_positions_mdom_avg$Retention.II..sec.)
+LRI2_avg = mean(IS_positions_mdom_avg$RI2_all)
 
 IS_positions_mdom_avg <- IS_positions_mdom_avg %>% 
   mutate(relative_LRI = (LRI_avg_all/LRI1_avg)*LRI_weight) %>% 
-  mutate(relative_LRI2 = (Retention.II..sec./LRI2_avg)*LRII_weight)
+  mutate(relative_LRI2 = (RI2_all/LRI2_avg)*LRII_weight)
 
 write.csv(IS_positions_mdom_avg, "IS_positions_mdom_avg_rel.csv")
 
 Analyte_positions_mdom_trial <- M_t_analyte_unique_mdom %>% 
   group_by(Compound.Name, File_num) %>% 
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
 
 # note filtering out three small blobs outside of RI window
 
 Analyte_positions_mdom <- M_t_analyte_unique_mdom %>% 
   filter(!is.na(LRI.I)) %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = (mean(Retention.II..sec.) - rt2_floor))
+  dplyr::summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = median(Retention.II..sec. - rt2_floor))
+  
 
 Analyte_positions_mdom <- Analyte_positions_mdom %>% 
   mutate(relative_LRI = (LRI_avg/LRI1_avg)*LRI_weight) %>% 
@@ -813,22 +824,317 @@ IS_problems <- M_t_analyte_withIS_mdom %>%
 
 File_norm_totorg_mdom <- M_t_analyte_withIS_mdom %>% 
   group_by(r_date) %>% 
-  summarise(vol_normnorm_total = sum(vol_is_normnorm), vol_rawnorm_total = sum(vol_is_rawnorm))
+  dplyr::summarise(vol_normnorm_total = sum(vol_is_normnorm), vol_rawnorm_total = sum(vol_is_rawnorm))
 
-File_norm_totorg %>% 
+File_norm_totorg_mdom %>% 
   ggplot(aes(x = r_date, y = vol_rawnorm_total))+
   geom_point()
 
-File_norm_totorg %>% 
+File_norm_totorg_mdom %>% 
   ggplot(aes(x = r_date, y = vol_normnorm_total))+
   geom_point()
 
 M_t_analyte_withIS_mdom <- M_t_analyte_withIS_mdom %>% 
-  left_join(File_norm_totorg) %>% 
+  left_join(File_norm_totorg_mdom) %>% 
   mutate(vol_is_normnorm_totorgnorm = vol_is_normnorm/vol_normnorm_total)
 
 
 ```
+btz quant
+```{r}
+btz_info.mdom <- read_csv("Benzothiazoles_Combined_info_trimmed.csv")
+btz_qf <- read_csv("btz_quantfactors.csv")
+
+btz_mdom_list <- btz_info.mdom %>% 
+  filter(!is.na(MDOM_name)) %>% 
+  dplyr::select(MDOM_name, My_Name, Quant_Proxy) %>% 
+  left_join(btz_qf) %>% 
+  mutate(keep = 1)
+
+mdom_amt_persamp <- 50 #ug
+unit <- 1000 #ug/mg, becuase mdom conc are in ug
+#pun_per_f <- 22.536 
+M_t_analyte_withIS_mdom.btz <- M_t_analyte_withIS_mdom %>% 
+  left_join(btz_mdom_list, by = c("Compound.Name"= "MDOM_name")) %>% 
+  filter(keep ==1) %>% 
+  mutate(ng_per_ug = (vol_is_rawnorm/QF_mean)/mdom_amt_persamp) %>% 
+  mutate(ng_per_L = ng_per_ug*unit*mdom_conc)
+
+M_t_analyte_withIS_mdom.btz %>% 
+  ggplot(aes(x = r_date, y = ng_per_L, fill = My_Name)) +
+  geom_col()
+
+
+
+btz_mean_conc.mdom <- M_t_analyte_withIS_mdom.btz %>% 
+  dplyr::select(My_Name, r_date, ng_per_L) %>% 
+  spread(My_Name, ng_per_L, fill = 0) %>% 
+  gather(key = "My_Name", value = "ng_per_L", -r_date) %>% 
+  group_by(My_Name) %>% 
+  dplyr::summarise(ng_per_L.mean = mean(ng_per_L)) %>% 
+  mutate(ug_per_L.mean = ng_per_L.mean/1e3) 
+
+btz_mean_conc.mdom <- btz_mean_conc.mdom %>% 
+  mutate(vol_frac_mdom = ng_per_L.mean/sum(btz_mean_conc.mdom$ng_per_L.mean, na.rm = TRUE))
+
+
+combined.btz <- btz_mean_conc %>% 
+  full_join(btz_mean_conc.mdom) %>% 
+  left_join(btz_info.mdom)
+
+btz_mean_conc.mdom.l <- btz_mean_conc.mdom %>% 
+  mutate(type = "MDOM") %>% 
+  mutate(vol_frac = vol_frac_mdom) %>% 
+  dplyr::select(My_Name, vol_frac, type)
+
+btz_mean_conc.l <- btz_mean_conc %>% 
+  mutate(type = "SSA") %>% 
+  mutate(vol_frac = vol_frac_ssa) %>% 
+  dplyr::select(My_Name, vol_frac, type)   
+
+combined_btz_long <- rbind(btz_mean_conc.l, btz_mean_conc.mdom.l) %>% 
+  left_join(btz_info.mdom) %>% 
+  filter(!is.na(vol_frac))
+
+
+#install.packages("quantreg")
+combined_btz_long %>% ggplot(aes(x = type, y = water_sol_mg_L, color = Label_name, size = vol_frac*100))+
+  geom_point(shape = 0)+
+  geom_boxplot(aes(x = type, y = water_sol_mg_L, weight = vol_frac*100))
+
+mdomcomp <- combined_btz_long %>% ggplot(aes(x = type, y = log(water_sol_mg_L), weight = log(vol_frac*100000)))+
+  geom_boxplot(range = 8)+
+  geom_jitter(aes(x = type, y = log(water_sol_mg_L), color = Label_name, size = vol_frac*100), width = .15)+
+  ylab("log(Solubility(mg/L))")+
+  xlab("")+
+  scale_color_manual(values = c("purple", "blue", "red"))+
+  labs(color="Occurence Above\nDetection Limits", size="Percent Benzothiazole\nCarbon Pool")+
+  theme_bw()
+
+mdomcomp
+
+png("mdomcomp.png", width=7, height=7,
+    units="in", res=600, pointsize=12)
+mdomcomp
+dev.off()
+  
+
+```
+
+making pie graphs
+
+```{r}
+combined.btz<- combined.btz %>% 
+  arrange(Label_name) 
+
+combined.btz.pie <- combined.btz %>% 
+  mutate(ymin.ssa = 0) %>% 
+  mutate(ymax.ssa = vol_frac_ssa) %>% 
+  mutate(ymin.mdom = 0) %>% 
+  mutate(ymax.mdom = vol_frac_mdom) %>% 
+  mutate(vol_frac_ssa = replace_na(vol_frac_ssa, 0)) %>% 
+  mutate(vol_frac_mdom = replace_na(vol_frac_mdom, 0)) %>% 
+  arrange(desc(vol_frac_ssa)) %>% 
+  arrange(Label_name) %>% 
+  mutate(id = as.factor(row_number()))
+
+
+
+for(i in 2:nrow(combined.btz.pie)){
+  combined.btz.pie$ymin.ssa[i]= combined.btz.pie$ymax.ssa[i-1]
+  combined.btz.pie$ymax.ssa[i]= combined.btz.pie$ymax.ssa[i-1]+ combined.btz.pie$vol_frac_ssa[i]
+  
+  combined.btz.pie$ymin.mdom[i]= combined.btz.pie$ymax.mdom[i-1]
+  combined.btz.pie$ymax.mdom[i]= combined.btz.pie$ymax.mdom[i-1]+ combined.btz.pie$vol_frac_mdom[i]
+}
+
+combined.btz.pie.ssa <- combined.btz.pie %>% 
+  filter(!is.na(SSA_name)) 
+
+pie.labs.ssa <- combined.btz.pie.ssa %>% 
+  dplyr::select(id, My_Name, Plot_color, vol_frac_ssa) %>% 
+  mutate(group = "names") %>% 
+  mutate(width = 3)
+
+both.t <- combined.btz.pie.ssa %>% 
+  group_by(Label_name) %>% 
+  summarise(vol_frac_ssa = sum(vol_frac_ssa))
+
+extralabs.ssa <- data.frame(id = as.factor(c(17,18)), My_Name = c("Both Phases", "SSA Only"), Plot_color = c("grey20", "grey80"), vol_frac_ssa = both.t$vol_frac_ssa) %>% 
+  mutate(group = "foundwhere") %>% 
+  mutate(width = 1)
+
+pie.labs.ssa <- rbind(pie.labs.ssa, extralabs.ssa)
+
+pie.labs.ssa <- pie.labs.ssa %>% 
+  mutate(My_Name= as.factor(My_Name)) 
+
+t1 <- ggplot(combined.btz.pie.ssa) + 
+  
+  geom_rect(aes(fill=id, ymax=ymax.ssa, ymin=ymin.ssa, xmax=3, xmin=0)) +
+  #geom_rect(aes(fill=Label_name, ymax=ymax.ssa, ymin=ymin.ssa, xmax=3.5, xmin=3)) +
+  #scale_fill_manual(labels = pie.labs.ssa$My_Name, values = pie.labs.ssa$Plot_color)+
+  scale_fill_manual(labels = combined.btz.pie.ssa$My_Name, values = combined.btz.pie.ssa$Plot_color)+
+  xlim(c(0, 4)) + 
+  theme(aspect.ratio=1)# +
+  #coord_polar(theta="y")
+
+t2 <- t1 +
+  geom_rect(data = combined.btz.pie.ssa, aes(fill = Label_name, ymax=ymax.ssa, ymin=ymin.ssa, xmax=3.5, xmin=3))+
+  scale_fill_manual(labels = pie.labs.ssa$My_Name, values = pie.labs.ssa$Plot_color)
+
+t2
+
+blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  strip.text.x = element_text(size = 16),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank(),
+  axis.text = element_blank(),
+  legend.text = element_text(size = 16),
+  plot.title=element_text(size=14, face="bold")
+  )
+
+pie_ssa <- ggplot(pie.labs.ssa)+
+  geom_col(aes(x = group, y = vol_frac_ssa, fill = id))+
+  scale_fill_manual(name = "", labels = pie.labs.ssa$My_Name, values = pie.labs.ssa$Plot_color)+
+  coord_polar("y")+
+  blank_theme
+pie_ssa
+  
+png("piessa1.png", width=11, height=7,
+    units="in", res=600, pointsize=12)
+pie_ssa
+dev.off()
+
+
+
+```
+dom pie chart
+
+```{r}
+combined.btz.pie.mdom <- combined.btz.pie %>% 
+  filter(!is.na(MDOM_name)) 
+
+pie.labs.mdom <- combined.btz.pie.mdom %>% 
+  dplyr::select(id, My_Name, Plot_color, vol_frac_mdom) %>% 
+  mutate(group = "names") %>% 
+  mutate(width = 3)
+
+both.tt <- combined.btz.pie.mdom %>% 
+  group_by(Label_name) %>% 
+  summarise(vol_frac_mdom = sum(vol_frac_mdom))
+
+extralabs.mdom <- data.frame(id = as.factor(c(17,19)), My_Name = c("Both Phases", "DOM Only"), Plot_color = c("grey20", "grey80"), vol_frac_mdom = both.tt$vol_frac_mdom) %>% 
+  mutate(group = "foundwhere") %>% 
+  mutate(width = 1)
+
+pie.labs.mdom <- rbind(pie.labs.mdom, extralabs.mdom)
+
+
+pie_mdom <- ggplot(pie.labs.mdom)+
+  geom_col(aes(x = group, y = vol_frac_mdom, fill = id))+
+  scale_fill_manual(name = "", labels = pie.labs.mdom$My_Name, values = pie.labs.mdom$Plot_color)+
+  coord_polar("y")+
+  blank_theme
+
+png("piemdom1.png", width=11, height=7,
+    units="in", res=1000, pointsize=6)
+pie_mdom
+dev.off()
+```
+
+combined pie chart
+
+```{r}
+pie.labs.mdom.t <- pie.labs.mdom %>% 
+  mutate(facet = "DOM") %>% 
+  rename(vol_frac = vol_frac_mdom)
+
+pie.labs.ssa.t <- pie.labs.ssa %>% 
+  mutate(facet = "SSA")%>% 
+  rename(vol_frac = vol_frac_ssa)
+
+pie.labs.both <- rbind(pie.labs.ssa.t, pie.labs.mdom.t)
+
+pie.labs.both.n <- pie.labs.both %>% 
+  distinct(id, .keep_all = TRUE) %>% 
+  arrange(id)
+
+btz.pie.b <- ggplot(pie.labs.both, aes(x = group, y = vol_frac, fill = id))+
+  geom_col()+
+  facet_grid(facets=. ~ facet)+
+  scale_fill_manual(name = "", labels = pie.labs.both.n$My_Name, values = pie.labs.both.n$Plot_color)+
+  coord_polar(theta="y") +
+  blank_theme
+  
+btz.pie.b
+
+png("pieboth1.png", width=13, height=5,
+    units="in", res=1500, pointsize=2)
+btz.pie.b
+dev.off()
+
+
+```
+now trying stick chart with solubilities
+
+```{r}
+btz.stickchart <- btz_info.mdom %>% 
+  left_join(btz_mean_conc) %>% 
+  left_join(btz_mean_conc.mdom) %>% 
+  arrange(My_Name) %>% 
+  arrange(desc(water_sol_mg_L)) %>% 
+  mutate(My_Name = factor(My_Name, My_Name)) %>% 
+  mutate(pcol = factor(Plot_color, Plot_color)) 
+
+colorvals <- (btz.stickchart$Plot_color)#
+colorvals <- c("cornflowerblue", "darkslateblue", "deeppink2", "deepskyblue2","greenyellow", 
+               "lawngreen", "lightseagreen", "maroon3", "mediumslateblue", "orange1", 
+               "palegreen2", "red1", "red4", "turquoise", "violetred4", "yellow1")
+colorvals
+
+colornames <- (btz.stickchart$My_Name)
+colornames
+
+coeff3 = 1/16
+
+btz.stickchart %>% 
+  #arrange(desc(water_sol_mg_L)) %>% 
+  #mutate(My_Name = factor(My_Name, My_Name)) %>% 
+  #mutate(plot_color = factor(Plot_color, Plot_color)) %>% 
+  ggplot()+
+  geom_point(aes(x = My_Name, y = vol_frac_ssa, fill = "SSA", color = Plot_color), size = 2, shape = 22)+
+  geom_point(aes(x = My_Name, y = vol_frac_mdom, fill = "MDOM", color = Plot_color), size = 2, shape = 25)+
+  scale_fill_manual(values = c("black", "white"), labels = c("SSA", "DOM"))+
+  scale_color_manual(values = colorvals, labels = colornames)+
+  
+  geom_point(aes(x = My_Name, y = log(water_sol_mg_L)*coeff3), color = "lightblue3")+
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Fraction Benzothiazole\nCarbon Pool",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./coeff3, name="Log Solubility (mg/L)")
+  )+
+  theme_bw()+
+  coord_flip()
+
+
+btz.stickchart %>% 
+  ggplot()+
+  geom_point(aes(x = log(water_sol_mg_L), y = vol_frac_ssa, color = My_Name), shape = 15)+
+  geom_point(aes(x = log(water_sol_mg_L), y = vol_frac_mdom, color = My_Name), shape = 0)
+
+
+
+```
+
+
 
 
 ```{r, fig.width=7, fig.height=7}
@@ -932,6 +1238,21 @@ M_t_analyte_withIS.btz %>%
   xlab("")+
   xlim(btzdatemin, btzdatemax)
 
+M_t_analyte_withIS.btz %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm, color = My_Name, fill = log(water_sol_mg_L)))+
+  geom_col(position = "stack", size = 1)+
+  scale_fill_gradient(low = "white", high = "black", limits = c(0,8))+
+  scale_colour_manual(values = btz_colors_ssa$btz_colors) +
+  theme(legend.position = "bottom", legend.box="vertical", legend.margin=margin(), legend.text=element_text(size=8))+
+    labs(color="", fill="log(Solubility)")+
+  guides(color=guide_legend(nrow=4,byrow=TRUE))+
+  ggtitle("Benzothiazoles in SSA")+
+  ylab("IS_normalized_btzsig")+
+  xlab("")+
+  xlim(btzdatemin, btzdatemax)
+
+
+
 
 btz_both_ts <- M_t_analyte_withIS.btz %>% 
   full_join(M_t_analyte_withIS_mdom.btz, by = c("r_date", "My_Name")) 
@@ -970,6 +1291,46 @@ btz_info %>%
   xlab("")
   
   
+
+
+```
+
+
+```{r}
+ btz_summarized_vols_ssa <- M_t_analyte_withIS.btz %>% 
+  mutate(quant_abun = vol_is_normnorm_ptnorm * ssa_quant_factor) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(mean_vol_quantified = mean(quant_abun, na.rm = TRUE)) %>% 
+  left_join(btz_info, by = c("Compound.Name"= "SSA_name"))
+
+ btz_summarized_vols_mdom <- M_t_analyte_withIS_mdom.btz %>% 
+  mutate(quant_abun = vol_is_normnorm * mdom_quant_factor) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(mean_vol_quantified = mean(quant_abun, na.rm = TRUE)) %>% 
+  left_join(btz_info, by = c("Compound.Name"= "MDOM_name"))
+
+ total_quant_btz_ssa <- sum(btz_summarized_vols_ssa$mean_vol_quantified)
+ 
+ total_quant_btz_mdom <- sum(btz_summarized_vols_mdom$mean_vol_quantified)
+ 
+ btz_summarized_vols_ssa <- btz_summarized_vols_ssa %>% 
+   mutate(mean_vol_quant.n = mean_vol_quantified/total_quant_btz_ssa)
+ 
+ btz_summarized_vols_mdom <- btz_summarized_vols_mdom %>% 
+   mutate(mean_vol_quant.n = mean_vol_quantified/total_quant_btz_mdom)
+ 
+ggplot(data = btz_summarized_vols_ssa)+
+   geom_point(aes(x = "Sea Spray Aerosol", y = log(water_sol_mg_L), size = mean_vol_quant.n, color = Label_name, fill = Label_name.sp), shape = 21)+
+   geom_point(data = btz_summarized_vols_mdom, aes(x = "DOM", y = log(water_sol_mg_L), size = mean_vol_quant.n, color = Label_name, fill = Label_name.sp), shape = 21)+
+   theme_bw()+
+   scale_color_manual(values = c("black", "blue", "red"))+
+  scale_fill_manual(values = c("yellow", "green1", "white"))+
+   ylab("log(Solubility(mg/L))")+
+   xlab("")+
+  ggtitle("Solubility and Molecular Overlap\n of DOM and SSA Benzothiazoles")+
+  guides(fill=guide_legend(title="Notable Compounds"), color=guide_legend(title=""), size=guide_legend(title="Fraction Benzothiazole\nOrganic Pool") )
+   
+
 
 
 ```
