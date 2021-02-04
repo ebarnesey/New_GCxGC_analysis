@@ -840,6 +840,155 @@ M_t_analyte_withIS_mdom <- M_t_analyte_withIS_mdom %>%
 
 
 ```
+DOM seascape methods comarison plot
+```{r}
+anthroad <- M_t_analyte_withIS_mdom %>% 
+  filter(Sample_num == ("MDOM_0724")|Sample_num == ("MDOM_0726")) %>% 
+  dplyr::select(Sample_num, Compound.Name, vol_is_rawnorm) %>% 
+  spread(Sample_num, vol_is_rawnorm, fill = 0)  %>% 
+  mutate(norm_volchange = MDOM_0726 - MDOM_0724) %>% 
+  mutate(pct_change = 100*norm_volchange/(MDOM_0726)) %>% 
+  left_join(Analyte_positions_mdom) %>% 
+  mutate(enhancement_cat = NA)
+
+for(i in 1:nrow(anthroad)){
+  if(anthroad$MDOM_0724[i] == 0){
+    anthroad$enhancement_cat[i] = "Introduced"
+  }else if(anthroad$MDOM_0726[i] == 0){
+    anthroad$enhancement_cat[i] = "Removed"
+  }else if(anthroad$norm_volchange[i] < 0){
+    anthroad$enhancement_cat[i] = "Reduced"
+  }else if(anthroad$norm_volchange[i] > 0){
+    anthroad$enhancement_cat[i] = "Enhanced"
+  }else{
+    anthroad$enhancement_cat[i] = "check"
+  }
+  
+  
+  
+}
+
+anthroad <- anthroad %>% 
+  mutate(enhancement_cat.f = as.factor(enhancement_cat))
+
+anthroad$enhancement_cat.f.l <- relevel(anthroad$enhancement_cat.f, "Introduced")
+
+
+anthroad %>% 
+  filter(MDOM_0726 > .00001) %>% 
+  ggplot(aes(x = LRI_avg, y = RI2, color = pct_change, size = MDOM_0726, shape = enhancement_cat.f.l))+
+  geom_point()+
+  xlab("Kovats Index")+
+  ylab("Retention Time II (seconds)")+
+  ggtitle("Post-Transportation Dissolved Organic Matter:\nComparison to Pre-Transport")+
+  scale_size(name = "Compound Signal")+
+  scale_shape_manual(name = "Compound Class", values = c(18,17, 16))+
+  scale_color_gradientn(name= "Percent Change\nfrom Previous Sample", limits = c(-400, 100),
+    colors=c('red4','darksalmon','pink2','dodgerblue1','dodgerblue4'),
+    values=c(  -1,       -.005,  0,    .001,      .2)+400/500, na.value = "red4")+
+  theme_bw(base_size = 16)
+  
+  
+bioad <- M_t_analyte_withIS_mdom %>% 
+  filter(Sample_num == ("MDOM_0730")|Sample_num == ("MDOM_0726")) %>% 
+  dplyr::select(Sample_num, Compound.Name, vol_is_rawnorm) %>% 
+  spread(Sample_num, vol_is_rawnorm, fill = 0)  %>% 
+  mutate(norm_volchange = MDOM_0730 - MDOM_0726) %>% 
+  mutate(pct_change = 100*norm_volchange/(MDOM_0730)) %>% 
+  left_join(Analyte_positions_mdom) %>% 
+  mutate(enhancement_cat = NA)
+
+for(i in 1:nrow(bioad)){
+  if(bioad$MDOM_0726[i] == 0){
+    bioad$enhancement_cat[i] = "Introduced"
+  }else if(bioad$MDOM_0730[i] == 0){
+    bioad$enhancement_cat[i] = "Removed"
+  }else if(bioad$norm_volchange[i] < 0){
+    bioad$enhancement_cat[i] = "Reduced"
+  }else if(bioad$norm_volchange[i] > 0){
+    bioad$enhancement_cat[i] = "Enhanced"
+  }else{
+    bioad$enhancement_cat[i] = "check"
+  }
+  
+  
+  
+}
+
+bioad <- bioad %>% 
+  mutate(enhancement_cat.f = as.factor(enhancement_cat))
+
+bioad$enhancement_cat.f.l <- relevel(bioad$enhancement_cat.f, "Introduced")
+
+
+bioad %>% 
+  filter(MDOM_0730 > .00001) %>% 
+  ggplot(aes(x = LRI_avg, y = RI2, color = pct_change, size = MDOM_0730, shape = enhancement_cat.f.l))+
+  geom_point()+
+  xlab("Kovats Index")+
+  ylab("Retention Time II (seconds)")+
+  ggtitle("Bloom Dissolved Organic Matter:\nComparison to Pre-Bloom")+
+  scale_size(name = "Compound Signal")+
+  scale_shape_manual(name = "Compound Class", values = c(18,17, 16))+
+  scale_color_gradientn(name= "Percent Change\nfrom Previous Sample", limits = c(-400, 100),
+    colors=c('red4','darksalmon','pink2','dodgerblue1','dodgerblue4'),
+    values=c(  -1,       -.005,  0,    .001,      .2)+400/500, na.value = "red4")+
+  theme_bw(base_size = 16)
+
+a.max <- max(anthroad$MDOM_0726)
+
+anthroad.s <- anthroad %>% 
+  filter(MDOM_0726>.00001) %>% 
+  #mutate(norm_vol = MDOM_0726/a.max) %>% 
+  mutate(norm_vol = MDOM_0726) %>% 
+  dplyr::select(Compound.Name, norm_vol, norm_volchange, pct_change, LRI_avg, RI2, enhancement_cat.f.l) %>% 
+  mutate(plot = as.factor("Post-Transportation Dissolved Organic Matter:\nComparison to Pre-Transport"))
+  
+b.max <- max(bioad$MDOM_0730)
+
+bioad.s <- bioad %>% 
+  filter(MDOM_0730>.00001) %>% 
+  #mutate(norm_vol = MDOM_0730/b.max) %>% 
+  mutate(norm_vol = MDOM_0730) %>% 
+  dplyr::select(Compound.Name, norm_vol, norm_volchange, pct_change, LRI_avg, RI2, enhancement_cat.f.l) %>% 
+  mutate(plot = as.factor("Bloom Dissolved Organic Matter:\nComparison to Pre-Bloom"))
+
+kath.plots <- rbind(bioad.s, anthroad.s) 
+  
+
+kath.plots$plot.l <- relevel(kath.plots$plot, "Post-Transportation Dissolved Organic Matter:\nComparison to Pre-Transport")
+
+kjm <- kath.plots %>% 
+  ggplot(aes(x = LRI_avg, y = RI2, color = norm_volchange, size = norm_vol, shape = enhancement_cat.f.l))+
+  geom_point()+
+  facet_wrap(plot.l~., strip.position = "top")+
+  xlab("Kovats Index")+
+  ylab("Retention Time II (seconds)")+
+  #ggtitle("Bloom Dissolved Organic Matter:\nComparison to Pre-Bloom")+
+  scale_size(name = "Compound Signal")+
+  scale_shape_manual(name = "Compound Class", values = c(18,17, 16))+
+  scale_color_gradientn(name= "Signal Change\nfrom Previous Sample", limits = c(-45, 25),
+    colors=c('red4','darksalmon','pink2','dodgerblue1','dodgerblue4'),
+    values=c(  -1,       -.005,  0,    .001,      .5)+45/70, na.value = "red4")+
+  # scale_color_gradientn(name= "Percent Increase\nfrom Previous Sample", limits = c(0, 100),
+  #   colors=c('grey50','dodgerblue1','dodgerblue4'),
+  #   values=c( 0,    20,      100)/100, na.value = "grey50")+
+  
+  theme_bw(base_size = 16)+
+  theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1,"line"))
+  #guides(color = guide_legend(override.aes = list(size=5)))
+  #theme(legend.direction = "vertical", legend.margin = margin(c(5,1,1,10)))
+
+kjm
+png("kjm6.png", width=9, height=6,
+    units="in", res=1000, pointsize=13)
+kjm
+dev.off()
+  
+
+```
+
+
 btz quant
 ```{r}
 btz_info.mdom <- read_csv("Benzothiazoles_Combined_info_trimmed.csv")
@@ -914,7 +1063,7 @@ mdomcomp <- combined_btz_long %>% ggplot(aes(x = type, y = log(water_sol_mg_L), 
 mdomcomp
 
 png("mdomcomp.png", width=7, height=7,
-    units="in", res=600, pointsize=12)
+    units="in", res=600, pointsize=13)
 mdomcomp
 dev.off()
   
@@ -960,7 +1109,7 @@ both.t <- combined.btz.pie.ssa %>%
   group_by(Label_name) %>% 
   summarise(vol_frac_ssa = sum(vol_frac_ssa))
 
-extralabs.ssa <- data.frame(id = as.factor(c(17,18)), My_Name = c("Both Phases", "SSA Only"), Plot_color = c("grey20", "grey80"), vol_frac_ssa = both.t$vol_frac_ssa) %>% 
+extralabs.ssa <- data.frame(id = as.factor(c(17,18)), My_Name = c("Both Phases", "SSA Only"), Plot_color = c("grey50", "grey90"), vol_frac_ssa = both.t$vol_frac_ssa) %>% 
   mutate(group = "foundwhere") %>% 
   mutate(width = 1)
 
@@ -1028,7 +1177,7 @@ both.tt <- combined.btz.pie.mdom %>%
   group_by(Label_name) %>% 
   summarise(vol_frac_mdom = sum(vol_frac_mdom))
 
-extralabs.mdom <- data.frame(id = as.factor(c(17,19)), My_Name = c("Both Phases", "DOM Only"), Plot_color = c("grey20", "grey80"), vol_frac_mdom = both.tt$vol_frac_mdom) %>% 
+extralabs.mdom <- data.frame(id = as.factor(c(17,19)), My_Name = c("Both Phases", "DOM Only"), Plot_color = c("grey50", "grey15"), vol_frac_mdom = both.tt$vol_frac_mdom) %>% 
   mutate(group = "foundwhere") %>% 
   mutate(width = 1)
 
@@ -1102,17 +1251,17 @@ colornames
 
 coeff3 = 1/16
 
-btz.stickchart %>% 
+stick <- btz.stickchart %>% 
   #arrange(desc(water_sol_mg_L)) %>% 
   #mutate(My_Name = factor(My_Name, My_Name)) %>% 
   #mutate(plot_color = factor(Plot_color, Plot_color)) %>% 
   ggplot()+
-  geom_point(aes(x = My_Name, y = vol_frac_ssa, fill = "SSA", color = Plot_color), size = 2, shape = 22)+
-  geom_point(aes(x = My_Name, y = vol_frac_mdom, fill = "MDOM", color = Plot_color), size = 2, shape = 25)+
-  scale_fill_manual(values = c("black", "white"), labels = c("SSA", "DOM"))+
+  geom_point(aes(x = My_Name, y = vol_frac_ssa, fill = "SSA", color = Plot_color, stroke = 1.5), size = 4.2, shape = 22)+
+  geom_point(aes(x = My_Name, y = vol_frac_mdom, fill = "DOM", color = Plot_color, stroke = 1.5), size = 3.6, shape = 23)+
+  scale_fill_manual(name = "", values = c("grey15", "grey90"))+
   scale_color_manual(values = colorvals, labels = colornames)+
   
-  geom_point(aes(x = My_Name, y = log(water_sol_mg_L)*coeff3), color = "lightblue3")+
+  geom_point(aes(x = My_Name, y = log(water_sol_mg_L)*coeff3), color = "steelblue4")+
   scale_y_continuous(
     
     # Features of the first axis
@@ -1121,9 +1270,17 @@ btz.stickchart %>%
     # Add a second axis and specify its features
     sec.axis = sec_axis(~./coeff3, name="Log Solubility (mg/L)")
   )+
-  theme_bw()+
+  theme_bw(base_size = 16)+
+  theme(axis.title.x.top = element_text(color = "steelblue4"))+
+  guides(color = FALSE)+
+  xlab("")+
   coord_flip()
 
+
+png("stick.png", width=7, height=5.5,
+    units="in", res=1500, pointsize=2)
+stick
+dev.off()
 
 btz.stickchart %>% 
   ggplot()+
