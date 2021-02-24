@@ -39,6 +39,7 @@ library(utils)
 library(lattice)
 #install.packages("latticeExtra")
 
+library(ggpubr)
 
 library(survival)
 library(Hmisc)
@@ -59,11 +60,44 @@ Required files:
 bt_sum_bloom3 <- read_csv("Blob_table_summary_CAICESample.csv") %>% 
   filter(Bloom == 3)
 
+water_t <- read_csv("flume_water_temp.csv") %>% 
+  mutate(r_date = mdy_hm(Datetime))
+
+
 bt_sum_bloom <- read_csv("Blob_table_summary_CAICESample.csv") %>% 
   filter(Category == "Sample")
 
 bt_sum_bloom3 <- bt_sum_bloom3 %>% mutate(r_date =    mdy_hm(SS_startdate)) %>% 
-  mutate(run_date = as.Date(gsub("GCxGC_","",File_num), "%Y%m%d"))
+  mutate(run_date = as.Date(gsub("GCxGC_","",File_num), "%Y%m%d")) %>% 
+  mutate(water_temp = NA)
+
+for(i in 1:(nrow(bt_sum_bloom3)-1)){
+  t_start = bt_sum_bloom3$r_date[i]
+  t_end = bt_sum_bloom3$r_date[i+1]
+  
+  time_temp <- water_t %>% 
+    filter(r_date > t_start) %>% 
+    filter(r_date < t_end)
+  
+  bt_sum_bloom3$water_temp[i]= mean(time_temp$Flume_T_C)
+  
+}
+
+chlor.mean <- mean(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
+chlor.sd <- sd(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
+
+hb.mean <- mean(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
+hb.sd <- sd(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
+
+t.mean <- mean(bt_sum_bloom3$water_temp, na.rm = TRUE)
+t.sd <- sd(bt_sum_bloom3$water_temp, na.rm = TRUE)
+
+bt_sum_bloom3 <- bt_sum_bloom3 %>% 
+  mutate(chlor.z = (Extracted_Chla-chlor.mean)/chlor.sd) %>% 
+  mutate(hb.z = (Bulk_HB_updated-hb.mean)/hb.sd) %>% 
+  mutate(temp.z = (water_temp-t.mean)/t.sd) 
+  
+
 
 make_file_name <- function(date_string) {
   file_start <- "CAICE_blobtables/"
@@ -90,7 +124,7 @@ make_massive_table <- function(summary_table){
     t <- read_bt_files(as.character(summary_table$File_num[i]))
     Mnew <- rbind(M, t)
     M <- Mnew
-    print(i)
+    #print(i)
   }
   M_t <<- M
 }
@@ -116,6 +150,12 @@ names(M_t_full) <- make.names(names(M_t_full),unique = TRUE)
 btz1 <- M_t_full3 %>% 
   filter(Compound.Name == "20200803_1535_blob_958_")
 # its here
+
+
+
+
+
+
 
 ```
 
@@ -240,12 +280,12 @@ Tracing Library Performance
 
 # tracking the mass of all of the analytes before bad matches are screened out for later analysis of library performance
 M_t_all_analytes_volcount <- M_t_all_analytes %>% 
-  group_by(File_num) %>% 
+  dplyr::group_by(File_num) %>% 
   dplyr::summarise(rawvol = sum(Volume))
 
 # tracking the number of all analutes in
 M_t_all_analytes_ncount <- M_t_all_analytes %>% 
-  count(File_num) %>% 
+  dplyr::count(File_num) %>% 
   dplyr::rename(total_num_analyte = n)
 
 M_t_match_analytes_volcount <- M_t_analyte_unique %>% 
@@ -253,8 +293,8 @@ M_t_match_analytes_volcount <- M_t_analyte_unique %>%
   summarise(rawvol_match = sum(Volume))
 
 M_t_match_analytes_ncount <- M_t_analyte_unique %>% 
-  count(File_num) %>% 
-  rename(total_num_analyte_match = n)
+  dplyr::count(File_num) %>% 
+  dplyr::rename(total_num_analyte_match = n)
 
 M_t_analyte_summary <- M_t_all_analytes_volcount %>% 
   left_join(M_t_all_analytes_ncount) %>% 
@@ -1016,34 +1056,103 @@ dev.off()
 max_chla <- max(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
 max_hb <- max(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
 chla_dat <- bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),]
-
+maxt <- max(bt_sum_bloom3$water_temp, na.rm = TRUE)
 
 
 chlor_hb <- ggplot()+
-  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = Extracted_Chla/max_chla, color = "Chlorophyll"), size = 1.5)+
-  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = Bulk_HB_updated/max_hb, color = "Het. Bact."), size = 1.5)+
-  scale_color_manual(values = c("green", "blue"))+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = Extracted_Chla/max_chla, color = "Chlorophyll-a"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = Bulk_HB_updated/max_hb, color = "Heterotrophic Bacteria"), size = 1.5)+
+  scale_color_manual(values = c("green4", "blue"))+
   labs(color = "")+
   xlab("")+
   ylab("Concentration \n(Normalized to Max)")+
-  theme_bw()
+  theme_bw(base_size = 18)+
+  theme(legend.title=element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), axis.text.x = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), legend.position = c(0.25, 0.85))
 
 chlor_hb
 
-png("chlorhb1.png", width=7, height=2.5,
+png("chlorhb1.png", width=10, height=3.5,
     units="in", res=600, pointsize=12)
 chlor_hb
 dev.off()
 
+#note this is for the voc plotting
+# chlor_hb2 <- ggplot()+
+#   geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = Extracted_Chla/max_chla, color = "Chlorophyll-a"), size = 1.5)+
+#   geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = Bulk_HB_updated/max_hb, color = "Heterotrophic Bacteria"), size = 1.5)+
+#   scale_color_manual(values = c("green4", "blue"))+
+#   labs(color = "")+
+#   xlim(min(bt_sum_voc$r_date), max(bt_sum_voc$r_date))+
+#   xlab("")+
+#   ylab("Concentration \n(Normalized to Max)")+
+#   theme_bw(base_size = 16)+
+#   theme(legend.title=element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), axis.text.x = element_blank(),
+# panel.background = element_blank())
+# 
+# chlor_hb2
+
+time_min_plot = min(bt_sum_bloom3$r_date)
+time_max_plot = max(btz_voc$Date_time, na.rm = TRUE)
+
+chlor_hb_wt <- ggplot()+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = chlor.z, color = "Chlorophyll-a"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = hb.z, color = "Heterotrophic Bacteria"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$water_temp),], aes(x = r_date, y = temp.z, color = "Water Temperature"), size = 1.5)+
+  # scale_y_continuous(
+  #   
+  #   # Features of the first axis
+  #   #name = "Aerosol Concentration \n(ng/m^3)",
+  #   name = "Concentration \n(Normalized to Max)",
+  #   
+  #   # Add a second axis and specify its features
+  #   sec.axis = sec_axis((~.-23)/4, name="Water Temperature (Celcius)")
+  # )+
+  
+  
+  scale_color_manual(values = c("green4", "blue", "grey30"))+
+  labs(color = "")+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  xlab("")+
+  ylab("Water Concentration \nand Temp (Z-scored)")+
+  theme_bw(base_size = 18)+
+  theme(legend.title=element_blank(), axis.text.x = element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), 
+panel.background = element_blank(), legend.position = "bottom")
+
+chlor_hb_wt2 <- ggplot()+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = chlor.z, color = "Chlorophyll-a"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = hb.z, color = "Heterotrophic Bacteria"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$water_temp),], aes(x = r_date, y = temp.z, color = "Water Temperature"), size = 1.5)+
+  # scale_y_continuous(
+  #   
+  #   # Features of the first axis
+  #   #name = "Aerosol Concentration \n(ng/m^3)",
+  #   name = "Concentration \n(Normalized to Max)",
+  #   
+  #   # Add a second axis and specify its features
+  #   sec.axis = sec_axis((~.-23)/4, name="Water Temperature (Celcius)")
+  # )+
+  
+  
+  scale_color_manual(values = c("green4", "blue", "grey50"))+
+  labs(color = "")+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  xlab("")+
+  ylab("Water Concentration \nand Temp (Z-scored)")+
+  theme_bw(base_size = 16)+
+  theme(legend.title=element_blank(), axis.text.x = element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), 
+panel.background = element_blank())
 
 
+chlor_hb_wt2
 
 btz_mean_conc <- M_t_analyte_withIS.btz %>% 
   dplyr::select(My_Name, r_date, ng_per_cm3) %>% 
   spread(My_Name, ng_per_cm3, fill = 0) %>% 
   gather(key = "My_Name", value = "ng_per_cm3", -r_date) %>% 
   group_by(My_Name) %>% 
-  summarise(ng_per_cm3.mean = mean(ng_per_cm3)) %>% 
+  summarise(ng_per_cm3.mean = mean(ng_per_cm3),
+            ng_per_m3.sd = sd(ng_per_cm3)*1e6) %>% 
   mutate(ng_per_m3.mean = ng_per_cm3.mean*1e6) 
 
 btz_mean_conc <- btz_mean_conc%>% 
@@ -1065,37 +1174,48 @@ M_t_analyte_withIS.btz <- M_t_analyte_withIS.btz %>%
 
 #l <- c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n")
 
-coeff2 <- 80
+coeff2 <- .7
 
 pp_btz2 <- ggplot(M_t_analyte_withIS.btz) +
   
   geom_col(aes(x = r_date, y=(ng_per_cm3*1e6), fill = id)) + 
-  geom_point(data = btz_voc, aes(x = Date_time, y=(btz_ppt/1000)*coeff2, color = "Benzothiazole - VOC"), size = 3) + # Divide by 10 to get the same range than the temperature
-  theme(legend.position = "bottom")+
+  geom_point(data = btz_voc, aes(x = Date_time, y=(btz_ppt)*coeff2, color = "Benzothiazole - VOC"), size = 3) + # Divide by 10 to get the same range than the temperature
+  #theme(legend.position = "bottom")+
   xlab("")+
   scale_y_continuous(
     
     # Features of the first axis
-    name = "Aerosol Concentration (ng/m3)",
+    #name = "Aerosol Concentration \n(ng/m^3)",
+    name = expression(Aerosol~Concentration~(ng/m^3)),
     
     # Add a second axis and specify its features
-    sec.axis = sec_axis(~./coeff2, name="Gas Phase (ppb)")
+    sec.axis = sec_axis(~./coeff2, name="Gas Phase (ppt)")
   )+
   scale_color_manual(values = c("black"))+
   scale_fill_manual(labels = btz_plot_labs$My_Name, values = btz_plot_labs$Plot_color)+
   labs(color = "", fill = "")+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
   #guides(fill=guide_legend(ncol=3))+
-  theme_bw(base_size = 16)
+  theme_bw(base_size = 18)+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(ncol=2))
 
 pp_btz2
 
-png("btz_trial2.png", width=11, height=7,
-    units="in", res=600, pointsize=12)
+png("btz_trial3.png", width=11, height=7,
+    units="in", res=600, pointsize=5)
 pp_btz2
 dev.off()
 
+btztseries1 <- ggarrange(chlor_hb_wt, pp_btz2, heights = c(9, 16), 
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2, align = "v")
 
 
+png("btz_tseries4.png", width=9, height=10,
+    units="in", res=1000, pointsize=2)
+btztseries1
+dev.off() 
 
 btz_mean_voc <- mean(btz_voc$btz_ppt, na.rm = TRUE)
   
