@@ -120,6 +120,8 @@ for(i in 1:nrow(M_t_LRI_voc)){
     next
   } else if (descrip == "benzothiazole"){
      M_t_LRI_voc$Compound.Name[i] <- "benzothiazole"
+  } else if (descrip == "MT"){
+     M_t_LRI_voc$Compound.Name[i] <- "monoterpene"
   } else{
     next
   }
@@ -141,7 +143,9 @@ M_t_all_analytes_voc <- M_t_LRI_voc
 M_t_analyte_unique_voc <- M_t_all_analytes_voc %>% 
   arrange((r_date)) %>% 
   filter(LRI_diff < LRI_diff_floor) %>% 
-  filter(Library.Match.Factor > Match_factor_floor | Compound.Name == "benzothiazole") %>% 
+  filter(Library.Match.Factor > Match_factor_floor | 
+           Compound.Name == "benzothiazole"| Description == "MT" | 
+           Description == "match") %>% 
   #filter(Library.Reverse.Match.Factor > Reverse_match_factor_floor) %>% 
   arrange(desc(Volume)) %>% 
   arrange(Compound.Name) %>% 
@@ -153,6 +157,237 @@ M_t_analyte_unique_voc <- M_t_all_analytes_voc %>%
 
 ```
 
+# quantification check
+# part 1: kath SMA figures
+```{r}
+voc_qp <- read_csv("VOC_quant_proxies_incomplete.csv")
+
+voc_qf1 <- read_csv("VOC_LE0200_quantfactors_incomplete.csv")
+
+voc_qf <- voc_qf1 %>% 
+  dplyr::select(quant.proxy, cc_1, cc_2) %>% 
+  gather(key = "cal_curve", value = "quant.factor", -quant.proxy)
+
+
+# pv=nRt  ng_per_L = (n*mw*1e9)/V = p*mw*1e9/(RT)
+# want to ng/L * (1g/1e9 ng)*(1 mol/mw g) = mol/L
+# assume standard pressure 1 mol = 22.4 L
+pvnrt.T = 305
+pvnrt.P = 1
+pvnrt.R = .08206
+mpl = pvnrt.P/(pvnrt.R*pvnrt.T)
+#
+mol_per_l_air = 1/22.4
+
+
+M_t_voc_quantcheck <- M_t_all_analytes_voc %>% 
+  left_join(voc_qp) %>% 
+  filter(keep == 1) %>% 
+  group_by(Compound.Name, r_date) %>% 
+  summarise(vol_tot = sum(Volume)) %>%
+  spread(Compound.Name, vol_tot, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "volume_tot", -r_date) %>%
+  left_join(bt_sum_voc) %>%
+  left_join(voc_qp) %>% 
+  left_join(voc_qf) %>% 
+  mutate(vol_ng = volume_tot * (1/quant.factor)) %>% 
+  mutate(vol_ng_per_L = vol_ng/(amt_sampled_cm3/1000)) %>% 
+  mutate(vol_mol_per_L = vol_ng_per_L*(1/1e9)*(1/quant_mw)) %>% 
+  mutate(vol_ppt = (vol_mol_per_L/mpl)*1e12)
+
+M_t_voc_quantcheck.sum <- M_t_voc_quantcheck %>% 
+  group_by(Compound.Name) %>% 
+  summarise(vol_ppt.max = max(vol_ppt), vol_ppt.mean = mean(vol_ppt), vol_ppt.sd = sd(vol_ppt))
+
+M_t_voc_quantcheck <- M_t_voc_quantcheck %>% 
+  left_join(M_t_voc_quantcheck.sum) %>% 
+  mutate(vol_zscore = (vol_ppt-vol_ppt.mean)/vol_ppt.sd) %>% 
+  mutate(quant.proxy.f = as.factor(quant.proxy))
+
+M_t_voc_quantcheck$quant.proxy.f <- factor(M_t_voc_quantcheck$quant.proxy.f, levels = c("styrene", "naphthalene", "benzophenone", "benzothiazole", "limonene", "1-chlorooctane", "beta cyclocitral"))
+
+
+soa_fig <- M_t_voc_quantcheck %>% 
+  filter(quant.proxy != "benzothiazole") %>% 
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, shape = Class, color = quant.proxy.f), size = 2)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f))+
+  scale_color_manual(name = "Compound Name", labels = c("styrene", "naphthalene", "benzophenone", "monoterpenes", "1-chlorooctane", "beta cyclocitral"), values = c("darkorange2", "grey50", "tomato3", "aquamarine3", "mediumseagreen", "dodgerblue3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("z-Scored Gas Concentration")+
+  theme_bw(base_size = 16)
+
+# note: chlor_hb from SeaScape_timelines script, this wont work without it
+soatseries1 <- ggarrange(chlor_hb2, soa_fig, heights = c(10, 14), 
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2, align = "v")
+
+soatseries1
+
+png("soa_tseries4.png", width=9, height=7,
+    units="in", res=1000, pointsize=2)
+soatseries1
+dev.off() 
+
+
+soa_fig.a <- M_t_voc_quantcheck %>% 
+  filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class == "Anthropogenic") %>% 
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 16, size = 2)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f))+
+  scale_color_manual(name = "Anthropogenic Compounds", labels = c("styrene", "naphthalene", "benzophenone"), values = c("darkorange2", "grey50", "tomato3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("z-Scored Gas Concentration")+
+  theme_bw(base_size = 16)+
+  theme(axis.text.x = element_blank())
+
+soa_fig.a
+
+soa_fig.b <- M_t_voc_quantcheck %>% 
+  filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class == "Biogenic") %>%
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 17, size = 2)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f))+
+  scale_color_manual(name = "Biogenic Compounds", labels = c("monoterpenes", "1-chlorooctane", "beta cyclocitral"), values = c( "slateblue3", "mediumseagreen", "dodgerblue3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("z-Scored Gas Concentration")+
+  theme_bw(base_size = 16)
+
+soa_fig.b
+
+soatseries2 <- ggarrange(chlor_hb2, soa_fig.a, soa_fig.b, heights = c(9, 14, 14), 
+          labels = c("A", "B", "C"),
+          ncol = 1, nrow = 3, align = "v")
+
+soatseries2
+
+png("soa_tseries7.png", width=9, height=11,
+    units="in", res=1000, pointsize=2)
+soatseries2
+dev.off() 
+
+quant_voc_forcorr <- M_t_voc_quantcheck %>% 
+  dplyr::select(r_date, quant.proxy, vol_ppt) %>% 
+  spread(quant.proxy, vol_ppt) %>% 
+  dplyr::select(-r_date)
+
+quant.voc.cor <- cor(quant_voc_forcorr)
+
+
+```
+#part 2: btz paper stuff and others
+
+```{r}
+
+write.csv(M_t_voc_quantcheck, "vocs_quant_raw.csv")
+
+
+btz_fig.a <- M_t_voc_quantcheck %>% 
+  #filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class == "Anthropogenic") %>% 
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 16, size = 2.4)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), size = 1.3)+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  scale_color_manual(name = "Anthropogenic Compounds", labels = c("styrene", "naphthalene", "benzophenone", "benzothiazole"), values = c("darkorange2", "darkgoldenrod", "tomato3", "black"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("Gas Concentration\n(Z-Scored)")+
+  theme_bw(base_size = 16)
+
+btz_fig.a
+
+btz_fig.b <- M_t_voc_quantcheck %>% 
+  filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class == "Biogenic") %>%
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 17, size = 2.4)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), size = 1.3)+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  scale_color_manual(name = "Biogenic Compounds", labels = c("monoterpenes", "1-chlorooctane", "beta cyclocitral"), values = c( "slateblue3", "mediumseagreen", "dodgerblue3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("Gas Concentration\n(Z-Scored)")+
+  theme_bw(base_size = 16)+
+  theme(axis.text.x = element_blank())
+
+btz_fig.b
+
+
+btztseries2 <- ggarrange(chlor_hb_wt2, btz_fig.b, btz_fig.a, heights = c(9, 11, 11), 
+          labels = c("A", "B", "C"),
+          ncol = 1, nrow = 3, align = "v")
+
+btztseries2
+
+png("btz_tseries2.png", width=9, height=11,
+    units="in", res=1000, pointsize=2)
+btztseries2
+dev.off() 
+
+```
+# quant comparison vocus 
+
+```{r}
+
+vocus_c <- read_csv("vocus_quant_comparison.csv")
+vocus_c.btz <- vocus_c %>% 
+  filter(quant.proxy == "benzothiazole")
+
+vocus_c.mt <- vocus_c %>% 
+  filter(quant.proxy == "limonene")
+
+btz.lm2 <- lm(vol_ppt_vocus ~ 0 + vol_ppt, data = vocus_c.btz) # Adding the 0 term tells the lm() to fit the line through the origin
+summary(btz.lm2)
+
+btz.r2 <- summary(btz.lm2)$r.squared
+
+mt.lm2 <- lm(vol_ppt_vocus ~ 0 + vol_ppt, data = vocus_c.mt) # Adding the 0 term tells the lm() to fit the line through the origin
+summary(mt.lm2)
+
+mt.r2 <- summary(mt.lm2)$r.squared
+
+r2 <- expression(R^2)
+
+v.lab.btz.r2 <- paste('R^2 == ', round(btz.r2, 2))
+v.lab.btz.slope <- paste("Ratio= ", round(btz.lm2$coefficients[1], 2))
+
+v.lab.mt.r2 <- paste('R^2 == ', round(mt.r2, 2))
+v.lab.mt.slope <- paste("Ratio= ", round(mt.lm2$coefficients[1], 2))
+
+
+vocus_q <- vocus_c %>% 
+  ggplot()+
+  geom_abline(intercept=0, slope=1, color='grey50', size=1, linetype = "dashed")+
+  geom_abline(intercept=0, slope=btz.lm2$coefficients[1], color='black', size=1)+
+  geom_abline(intercept=0, slope=mt.lm2$coefficients[1], color='slateblue3', size=1)+
+  geom_point(aes(x = vol_ppt, y = vol_ppt_vocus, color = quant.proxy, shape = quant.proxy,), size = 3)+
+  scale_color_manual(name = "", labels = c("Benzothiazole", "Monoterpenes"), values = c("black", "slateblue3"))+
+  scale_shape_manual(name = "", labels = c("Benzothiazole", "Monoterpenes"), values = c(16, 17))+
+  annotate(geom = 'text', x = 1, y = 220, label =v.lab.btz.r2 , hjust = 0, vjust = 1, parse = TRUE)+
+  annotate(geom = 'text', x = 1, y = 205, label =v.lab.btz.slope , hjust = 0, vjust = 1, parse = FALSE)+
+  annotate(geom = 'text', x = 105, y = 250, label =v.lab.mt.r2 , hjust = 0, vjust = 1, parse = TRUE)+
+  annotate(geom = 'text', x = 105, y = 235, label =v.lab.mt.slope , hjust = 0, vjust = 1, parse = FALSE)+
+  annotate(geom = 'text', x = 150, y = 130, label ="Perfect Quantification\nAgreement (1:1)" , hjust = 0, vjust = 1, parse = FALSE)+
+  xlab("Dome Concentration GCxGC (ppt)")+
+  ylab("Dome Concentration Vocus (ppt)")+
+  xlim(0, 250)+
+  ylim(0,250)+
+  theme_bw(base_size = 16)+
+  coord_fixed()
+
+png("vocus_quant.png", width=7, height=5.6,
+    units="in", res=1000, pointsize=2)
+vocus_q
+dev.off() 
+
+
+```
 
 
 # SOA focus
@@ -178,7 +413,7 @@ M_t_analyte_unique_voc.soa.qf1 <- M_t_analyte_unique_voc.soa %>%
 soameanconc <- M_t_analyte_unique_voc.soa.qf1 %>% 
   filter(Sample_Number != "g57") %>% 
   group_by(Compound.Name) %>% 
-  summarise(ng_cm3.mean = mean(ng_cm3, na.rm = TRUE), ng_cm3_yield.mean = mean(ng_cm3_yield, na.rm = TRUE)) %>% 
+  dplyr::summarise(ng_cm3.mean = mean(ng_cm3, na.rm = TRUE), ng_cm3_yield.mean = mean(ng_cm3_yield, na.rm = TRUE)) %>% 
   arrange(desc(ng_cm3_yield.mean)) 
 
 soameanconc <- tibble::rownames_to_column(soameanconc, "rank_soa")
@@ -241,7 +476,7 @@ Rough timelines
 ```{r}
 voc_names_vols <- M_t_analyte_unique_voc %>% 
   group_by(Compound.Name) %>% 
-  summarise(mean_vol_roughnorm = mean(volume_norm_rough)) %>% 
+  dplyr::summarise(mean_vol_roughnorm = mean(volume_norm_rough)) %>% 
   arrange(desc(mean_vol_roughnorm))
 
 voc.tseries.0filled <- M_t_analyte_unique_voc %>% 
@@ -256,16 +491,21 @@ for(i in 1:nrow(voc_names_vols)){
   
   tempt <- voc.tseries.0filled %>% 
     filter(Compound.Name == cname)  
-    
+  
+  max_vol = max(tempt$volume_norm_rough)
   
   ptemp <- tempt %>% 
     ggplot(aes(x = r_date, y = volume_norm_rough, color = T_O_D))+
     geom_point()+
-    ggtitle(cname)
+    ggtitle(cname)+
+    ylim(0, max_vol)
   
   print(ptemp)
   
 }
+
+
+
 
 
 ```

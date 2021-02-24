@@ -942,7 +942,7 @@ anthroad.s <- anthroad %>%
   #mutate(norm_vol = MDOM_0726/a.max) %>% 
   mutate(norm_vol = MDOM_0726) %>% 
   dplyr::select(Compound.Name, norm_vol, norm_volchange, pct_change, LRI_avg, RI2, enhancement_cat.f.l) %>% 
-  mutate(plot = as.factor("Post-Transportation Dissolved Organic Matter:\nComparison to Pre-Transport"))
+  mutate(plot = as.factor("Post-Transportation \nDissolved Organic Matter:\nComparison to Pre-Transport"))
   
 b.max <- max(bioad$MDOM_0730)
 
@@ -951,40 +951,122 @@ bioad.s <- bioad %>%
   #mutate(norm_vol = MDOM_0730/b.max) %>% 
   mutate(norm_vol = MDOM_0730) %>% 
   dplyr::select(Compound.Name, norm_vol, norm_volchange, pct_change, LRI_avg, RI2, enhancement_cat.f.l) %>% 
-  mutate(plot = as.factor("Bloom Dissolved Organic Matter:\nComparison to Pre-Bloom"))
+  mutate(plot = as.factor("Bloom \nDissolved Organic Matter:\nComparison to Pre-Bloom"))
 
 kath.plots <- rbind(bioad.s, anthroad.s) 
   
 
-kath.plots$plot.l <- relevel(kath.plots$plot, "Post-Transportation Dissolved Organic Matter:\nComparison to Pre-Transport")
+kath.plots$plot.l <- relevel(kath.plots$plot, "Post-Transportation \nDissolved Organic Matter:\nComparison to Pre-Transport")
 
-kjm <- kath.plots %>% 
+#library(gt)
+pal <- RColorBrewer::brewer.pal(10, "Spectral")
+pal_darker  <- pal %>% adjust_luminance(-1.0)
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+pie(rep(1, 8), col = colorBlindBlack8)
+
+kjm <- 
+  kath.plots %>% 
   ggplot(aes(x = LRI_avg, y = RI2, color = norm_volchange, size = norm_vol, shape = enhancement_cat.f.l))+
   geom_point()+
   facet_wrap(plot.l~., strip.position = "top")+
   xlab("Kovats Index")+
   ylab("Retention Time II (seconds)")+
   #ggtitle("Bloom Dissolved Organic Matter:\nComparison to Pre-Bloom")+
-  scale_size(name = "Compound Signal")+
+  scale_size(name = "Normalized Signal")+
   scale_shape_manual(name = "Compound Class", values = c(18,17, 16))+
+  # scale_color_fermenter(name = "Signal Change\nfrom Previous Sample", n.breaks = 6, palette = "Spectral", direction = 1, limits = c(-45,45))+
+  # 
+  
   scale_color_gradientn(name= "Signal Change\nfrom Previous Sample", limits = c(-45, 25),
-    colors=c('red4','darksalmon','pink2','dodgerblue1','dodgerblue4'),
-    values=c(  -1,       -.005,  0,    .001,      .5)+45/70, na.value = "red4")+
+    colors=c(colorBlindBlack8[8],colorBlindBlack8[7],colorBlindBlack8[5],colorBlindBlack8[4], colorBlindBlack8[3],colorBlindBlack8[6]),
+    values=c(  -.9,       -.2,  -.001,    .001, .1,  .25,   .5)+45/70, na.value = "red4")+
+    
   # scale_color_gradientn(name= "Percent Increase\nfrom Previous Sample", limits = c(0, 100),
   #   colors=c('grey50','dodgerblue1','dodgerblue4'),
   #   values=c( 0,    20,      100)/100, na.value = "grey50")+
   
   theme_bw(base_size = 16)+
   theme(legend.position = "bottom", legend.direction = "vertical", legend.key.size = unit(1,"line"))
-  #guides(color = guide_legend(override.aes = list(size=5)))
   #theme(legend.direction = "vertical", legend.margin = margin(c(5,1,1,10)))
 
 kjm
-png("kjm6.png", width=9, height=6,
+png("kjm9.png", width=9, height=6,
     units="in", res=1000, pointsize=13)
 kjm
 dev.off()
+
+
   
+
+```
+pie charts
+
+```{r}
+kath.plots.pie <- kath.plots %>% 
+  mutate(cat.pie = "Previously Present\n")
+
+summary(kath.plots$pct_change)
+
+kath.plots %>% 
+  ggplot(aes(x = pct_change, y = norm_vol, color = plot))+
+  geom_col()+
+  xlim(0,100)
+
+cutoff <- 15
+
+for(i in 1:nrow(kath.plots.pie)){
+  
+  if(kath.plots.pie$pct_change[i]>cutoff){
+    kath.plots.pie$cat.pie[i] <- "Introduced or \nSignificantly Enhanced"
+  }
+  
+}
+
+pkk.s <- kath.plots.pie %>% 
+  group_by(plot.l) %>% 
+  dplyr::summarise(sum_vol.t = sum(norm_vol))
+
+pkk <- kath.plots.pie %>% 
+  group_by(plot.l, cat.pie) %>% 
+  dplyr::summarise(sum_vol = sum(norm_vol)) %>% 
+  left_join(pkk.s) %>% 
+  mutate(sum_pct = sum_vol/sum_vol.t)
+
+colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
+                       "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+pie(rep(1, 8), col = colorBlindBlack8)
+
+kjm.pie <- kath.plots.pie %>% 
+  ggplot(aes(x = "", y = norm_vol, fill = cat.pie))+
+  geom_col(position = "fill")+
+  facet_wrap(plot.l~., strip.position = "top")+
+  coord_polar("y")+
+  scale_fill_manual(name = "", values = c(colorBlindBlack8[6], colorBlindBlack8[8]))+
+  blank_theme
+
+kjm.pie
+png("kjmpie1.png", width=10, height=6,
+    units="in", res=1000, pointsize=13)
+kjm.pie
+dev.off()
+
+kjm.pie2 <- pkk %>% 
+  ggplot(aes(x = "", y = sum_pct, fill = cat.pie))+
+  geom_col(position = "fill")+
+  facet_wrap(plot.l~., strip.position = "top")+
+  geom_text(aes(label = paste(round(sum_pct * 100, 0), "%")),
+            position = position_stack(vjust = 0.5), size = 6) +
+  coord_polar("y")+
+  scale_fill_manual(name = "", values = c(colorBlindBlack8[6], colorBlindBlack8[8]))+
+  blank_theme
+kjm.pie2
+
+png("kjmpie5.png", width=10, height=6,
+    units="in", res=1000, pointsize=13)
+kjm.pie2
+dev.off()
 
 ```
 
@@ -1020,7 +1102,7 @@ btz_mean_conc.mdom <- M_t_analyte_withIS_mdom.btz %>%
   spread(My_Name, ng_per_L, fill = 0) %>% 
   gather(key = "My_Name", value = "ng_per_L", -r_date) %>% 
   group_by(My_Name) %>% 
-  dplyr::summarise(ng_per_L.mean = mean(ng_per_L)) %>% 
+  dplyr::summarise(ng_per_L.mean = mean(ng_per_L), ng_per_L.sd = sd(ng_per_L)/1) %>% 
   mutate(ug_per_L.mean = ng_per_L.mean/1e3) 
 
 btz_mean_conc.mdom <- btz_mean_conc.mdom %>% 
