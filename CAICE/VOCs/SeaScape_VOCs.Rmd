@@ -113,6 +113,10 @@ M_t_LRI_voc <- M_t_full_voc %>% mutate(LRI_diff = abs(Library.RI-LRI.I)) %>%
   mutate(LRI_diff = replace_na(LRI_diff, -999))
 
 
+M_t_voc_mt <- M_t_full_voc %>% 
+  filter(Description == "MT")
+
+
 for(i in 1:nrow(M_t_LRI_voc)){
   
   descrip <- M_t_LRI_voc$Description[i]
@@ -120,8 +124,8 @@ for(i in 1:nrow(M_t_LRI_voc)){
     next
   } else if (descrip == "benzothiazole"){
      M_t_LRI_voc$Compound.Name[i] <- "benzothiazole"
-  } else if (descrip == "MT"){
-     M_t_LRI_voc$Compound.Name[i] <- "monoterpene"
+   } else if (descrip == "MT"){
+      M_t_LRI_voc$Compound.Name[i] <- "monoterpene"
   } else{
     next
   }
@@ -280,6 +284,68 @@ quant.voc.cor <- cor(quant_voc_forcorr)
 
 
 ```
+# just MT qf for Adam
+
+```{r}
+M_t_voc_mt <- M_t_full_voc %>% 
+  filter(Description == "MT") %>% 
+  filter(!is.na(Compound.Name))
+
+for(i in 1:nrow(M_t_voc_mt)){
+  
+  cname.t <- M_t_voc_mt$Compound.Name[i]
+  #print(cname.t)
+  
+  if(cname.t == "blob168_g48_Limonene_CAICE_vocstand_incomplete"){
+    print(i)
+  } else if (cname.t == "carene"){
+    next
+  } else{
+    M_t_voc_mt$Compound.Name[i]= "Summed Other Monoterpenes"
+  }
+}
+
+voc_qp.mt <- voc_qp %>% 
+  rename(Compound.Name.l = Compound.Name)
+  
+
+M_t_voc_mt <- M_t_voc_mt %>% 
+  mutate(Compound.Name.l = "monoterpene")
+
+M_t_voc_quantcheck.mt <- M_t_voc_mt %>% 
+  left_join(voc_qp.mt) %>% 
+  filter(keep == 1) %>% 
+  group_by(Compound.Name, r_date) %>% 
+  summarise(vol_tot = sum(Volume)) %>%
+  spread(Compound.Name, vol_tot, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "volume_tot", -r_date) %>%
+  mutate(Compound.Name.l = "monoterpene") %>% 
+  left_join(bt_sum_voc) %>%
+  left_join(voc_qp.mt) %>% 
+  left_join(voc_qf) %>% 
+  mutate(vol_ng = volume_tot * (1/quant.factor)) %>% 
+  mutate(vol_ng_per_L = vol_ng/(amt_sampled_cm3/1000)) %>% 
+  mutate(vol_mol_per_L = vol_ng_per_L*(1/1e9)*(1/quant_mw)) %>% 
+  mutate(vol_ppt = (vol_mol_per_L/mpl)*1e12)
+
+M_t_voc_quantcheck.mt %>% 
+  ggplot(aes(x = r_date, y = vol_ppt, fill = Compound.Name))+
+  geom_col()+
+  scale_fill_manual(name = "", labels = c("Limonene", "Carene", "Summed Other Monoterpenes"), values = c("green", "red", "blue"))+
+  ylab("ppt")+
+  xlab("Date")+
+  theme_bw(base_size = 16)
+
+mt_foradam <- M_t_voc_quantcheck.mt %>% 
+  dplyr::select(r_date, Compound.Name, vol_ppt)
+
+write.csv(mt_foradam, "Monoterpenes_speciated_foradam.csv")
+
+
+```
+
+
+
 #part 2: btz paper stuff and others
 
 ```{r}

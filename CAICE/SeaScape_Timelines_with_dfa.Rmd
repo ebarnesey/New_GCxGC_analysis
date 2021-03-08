@@ -289,24 +289,24 @@ M_t_all_analytes_ncount <- M_t_all_analytes %>%
   dplyr::rename(total_num_analyte = n)
 
 M_t_match_analytes_volcount <- M_t_analyte_unique %>% 
-  group_by(File_num) %>% 
-  summarise(rawvol_match = sum(Volume))
+  dplyr::group_by(File_num) %>% 
+  dplyr::summarise(rawvol_match = sum(Volume))
 
 M_t_match_analytes_ncount <- M_t_analyte_unique %>% 
   dplyr::count(File_num) %>% 
   dplyr::rename(total_num_analyte_match = n)
 
 M_t_analyte_summary <- M_t_all_analytes_volcount %>% 
-  left_join(M_t_all_analytes_ncount) %>% 
-  left_join(M_t_match_analytes_volcount) %>% 
-  left_join(M_t_match_analytes_ncount) %>% 
-  mutate(perct_nfound = (total_num_analyte_match/total_num_analyte)*100) %>% 
+  dplyr::left_join(M_t_all_analytes_ncount) %>% 
+  dplyr::left_join(M_t_match_analytes_volcount) %>% 
+  dplyr::left_join(M_t_match_analytes_ncount) %>% 
+  dplyr::mutate(perct_nfound = (total_num_analyte_match/total_num_analyte)*100) %>% 
   mutate(perct_volfound = (rawvol_match/rawvol)*100)
 
 compound_pop <- M_t_analyte_unique %>% 
-  count(Compound.Name) %>% 
-  rename(comp.n = n) %>% 
-  mutate(pct_of_samp = (comp.n/max(comp.n)*100))
+  dplyr::count(Compound.Name) %>% 
+  dplyr::rename(comp.n = n) %>% 
+  dplyr::mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
 #table(compound_pop$comp.n)
 #hist(compound_pop$comp.n)
@@ -320,18 +320,18 @@ compound_pop <- M_t_analyte_unique %>%
 #   rename(total_num_analyte = n)
 
 M_t_analyte_count <- M_t_all_analytes %>% 
-  count(File_num) %>%
-  rename(total_num_analyte = n)
+  dplyr::count(File_num) %>%
+  dplyr::rename(total_num_analyte = n)
 # 
 # # counting the number of unique analytes in each image
 num_analyte_unique <- M_t_analyte_unique %>%
-  count(File_num) %>%
-  rename(unique.analyte = n)
+  dplyr::count(File_num) %>%
+  dplyr::rename(unique.analyte = n)
 
 # counting the number based percent of compounds being traced in all 
 perct_comps_traced <- num_analyte_unique %>% 
-   left_join(M_t_analyte_count) %>% 
-   mutate(pct_found = unique.analyte/total_num_analyte)
+   dplyr::left_join(M_t_analyte_count) %>% 
+   dplyr::mutate(pct_found = unique.analyte/total_num_analyte)
 # 
 #perct_comps_traced %>%
 #  ggplot(aes(y = pct_found))+
@@ -343,9 +343,9 @@ summary(perct_comps_traced$pct_found)
 M_t_analyte_unique <- M_t_analyte_unique %>% left_join(num_analyte_unique)
 
 compound_pop <- M_t_analyte_unique %>% 
-  count(Compound.Name) %>% 
-  rename(comp.n = n) %>% 
-  mutate(pct_of_samp = (comp.n/max(comp.n)*100))
+  dplyr::count(Compound.Name) %>% 
+  dplyr::rename(comp.n = n) %>% 
+  dplyr::mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
 table(compound_pop$comp.n)
 
@@ -355,8 +355,8 @@ hist(compound_pop$pct_of_samp,
      col = "grey")
 
 SeaScape_sample_cumcum <- M_t_analyte_unique %>% 
-  group_by(File_num) %>% 
-  summarise(File_vol = sum(Volume))
+  dplyr::group_by(File_num) %>% 
+  dplyr::summarise(File_vol = sum(Volume))
 
 
 M_t_analyte_unique <- M_t_analyte_unique %>% 
@@ -367,8 +367,8 @@ M_t_analyte_unique <- M_t_analyte_unique %>%
 
 M_t_analyte_unique %>% 
   mutate(char_comp_n = as.integer(round(pct_of_samp, 0))) %>% 
-  group_by(char_comp_n) %>% 
-  summarise(avg_vol_byn = mean(Volume)) %>% 
+  dplyr::group_by(char_comp_n) %>% 
+  dplyr::summarise(avg_vol_byn = mean(Volume)) %>% 
   ggplot(aes(x = char_comp_n, y = avg_vol_byn)) +
   geom_col()+
   labs(title = "Average Blob Volume by Library Match Frequency")+
@@ -518,10 +518,10 @@ compiled_comp_info %>%
 ```{r}
 SeaScape_cumsum_raw <- M_t_analyte_unique %>% 
   mutate(tic = 1) %>% 
-  group_by(Compound.Name) %>% 
-  summarise(raw_cumsum = sum(Punch_t_norm_vol), num_obs = sum(tic)) %>% 
-  mutate(pct_obs = num_obs/nrow(bt_sum_bloom3)) %>% 
-  arrange(desc(raw_cumsum))
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(raw_cumsum = sum(Punch_t_norm_vol), num_obs = sum(tic)) %>% 
+  dplyr::mutate(pct_obs = num_obs/nrow(bt_sum_bloom3)) %>% 
+  dplyr::arrange(desc(raw_cumsum))
 
 
 
@@ -588,22 +588,22 @@ Internal Standard Mapping
 ```{r IS_mapping1}
 # note: unlike sample analytes, internal standard compounds are frequently split vertically into multiple blobs because of the high volume.  In order to account for this, I am summing all blobs together that meet the high match criteria and are very close in the first dimension.
 IS_unique <- IS_goodmatch %>% 
-  group_by(Compound.Name, File_num) %>% 
-  summarise(Volume_tot = sum(Volume)) %>% 
+  dplyr::group_by(Compound.Name, File_num) %>% 
+  dplyr::summarise(Volume_tot = sum(Volume)) %>% 
   filter(Compound.Name != "glucose-13C6") %>% 
   filter(Compound.Name != "dC14") 
 
 fixing <- data.frame(table(IS_unique$Compound.Name)) %>% 
-  mutate(Compound.Name = Var1)
+  dplyr::mutate(Compound.Name = Var1)
 
 IS_tofix <- IS_unique %>% 
-  left_join(fixing) %>% 
+  dplyr::left_join(fixing) %>% 
   filter(Freq < 37) %>% 
   left_join(bt_sum_bloom3, by = "File_num")
 
 IS_unique_c <- IS_unique %>% 
   mutate(tic = 1) %>% 
-  group_by(File_num) %>% 
+  dplyr::group_by(File_num) %>% 
   summarise(ticsum = sum(tic))
 
 c<- data.frame(table(IS_unique$Compound.Name))
@@ -623,9 +623,9 @@ IS_positions <- read.csv("IS.pos.knit.csv") %>%
   
 
 IS_avg_vols_toadd <- IS_unique %>% 
-  group_by(Compound.Name) %>% 
-  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
-  left_join(IS_unique) %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  dplyr::left_join(IS_unique) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
   dplyr::select(Compound.Name, File_num, IS_mean_norm)
@@ -653,14 +653,14 @@ IS_rt2 <- IS_positions_202008061332 %>%
 IS_positions <- IS_goodmatch %>% 
   filter(Compound.Name != "glucose-13C6") %>% 
   filter(Compound.Name != "dC14") %>% 
-  group_by(Compound.Name, File_num) %>% 
+  dplyr::group_by(Compound.Name, File_num) %>% 
   #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(abs(Retention.II..sec. - rt2_floor)))
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = min(abs(Retention.II..sec. - rt2_floor)))
 
 
 IS_positions_avg <- IS_positions %>% 
-  group_by(Compound.Name) %>% 
-  summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), RI2_all = mean(RI2, na.rm = TRUE)) 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), RI2_all = mean(RI2, na.rm = TRUE)) 
 
 
 write.csv(IS_positions_avg, "IS_positions_avg.csv")
@@ -668,16 +668,16 @@ write.csv(IS_positions_avg, "IS_positions_avg.csv")
 
 
 IS_avg_vols <- IS_unique %>% 
-  group_by(Compound.Name) %>% 
-  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
   left_join(IS_unique) %>% 
   mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
   mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
   left_join(bt_sum_bloom3)
 
 IS_avg_vols.s <- IS_unique %>% 
-  group_by(Compound.Name) %>% 
-  summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot))
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot))
 
 write.csv(IS_avg_vols.s, "IS_mean_med_vols_SSAbloom3_samples.csv")
 
@@ -761,15 +761,15 @@ IS_positions_avg <- IS_positions_avg %>%
 write.csv(IS_positions_avg, "IS_positions_avg_rel.csv")
 
 Analyte_positions_trial <- M_t_analyte_unique %>% 
-  group_by(Compound.Name, File_num) %>% 
-  summarise(LRI_avg = mean(LRI.I), RI2 = median(Retention.II..sec. - rt2_floor))
+  dplyr::group_by(Compound.Name, File_num) %>% 
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = median(Retention.II..sec. - rt2_floor))
 
 # note filtering out three small blobs outside of RI window
 
 Analyte_positions <- M_t_analyte_unique %>% 
   filter(!is.na(LRI.I)) %>% 
-  group_by(Compound.Name) %>% 
-  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = median(Retention.II..sec. - rt2_floor))
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = median(Retention.II..sec. - rt2_floor))
 
 Analyte_positions <- Analyte_positions %>% 
   mutate(relative_LRI = (LRI_avg/LRI1_avg)*LRI_weight) %>% 
@@ -962,8 +962,8 @@ IS_problems <- M_t_analyte_withIS %>%
   filter(is.na(IS_appropriate1))
 
 File_norm_totorg <- M_t_analyte_withIS %>% 
-  group_by(r_date) %>% 
-  summarise(vol_normnorm_total = sum(vol_is_normnorm_ptnorm), vol_rawnorm_total = sum(vol_is_rawnorm_ptnorm))
+  dplyr::group_by(r_date) %>% 
+  dplyr::summarise(vol_normnorm_total = sum(vol_is_normnorm_ptnorm), vol_rawnorm_total = sum(vol_is_rawnorm_ptnorm))
 
 File_norm_totorg %>% 
   ggplot(aes(x = r_date, y = vol_rawnorm_total))+
@@ -1140,7 +1140,8 @@ chlor_hb_wt2 <- ggplot()+
   xlab("")+
   ylab("Water Concentration \nand Temp (Z-scored)")+
   theme_bw(base_size = 16)+
-  theme(legend.title=element_blank(), axis.text.x = element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), 
+  theme(legend.title=element_blank(), legend.margin=margin(c(.5,.5,.5,.5)),
+  #theme(legend.title=element_blank(), axis.text.x = element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), 
 panel.background = element_blank())
 
 
@@ -1150,8 +1151,8 @@ btz_mean_conc <- M_t_analyte_withIS.btz %>%
   dplyr::select(My_Name, r_date, ng_per_cm3) %>% 
   spread(My_Name, ng_per_cm3, fill = 0) %>% 
   gather(key = "My_Name", value = "ng_per_cm3", -r_date) %>% 
-  group_by(My_Name) %>% 
-  summarise(ng_per_cm3.mean = mean(ng_per_cm3),
+  dplyr::group_by(My_Name) %>% 
+  dplyr::summarise(ng_per_cm3.mean = mean(ng_per_cm3),
             ng_per_m3.sd = sd(ng_per_cm3)*1e6) %>% 
   mutate(ng_per_m3.mean = ng_per_cm3.mean*1e6) 
 
@@ -1222,6 +1223,55 @@ btz_mean_voc <- mean(btz_voc$btz_ppt, na.rm = TRUE)
 
 
 
+
+```
+time series of each individual benzothiazole
+```{r}
+
+M_t_analyte_withIS.btz.zparam <- M_t_analyte_withIS.btz %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(ng_per_cm3.mean = mean(ng_per_cm3, na.rm = TRUE), ng_per_cm3.sd = sd(ng_per_cm3, na.rm = TRUE))
+
+M_t_analyte_withIS.btz.z <- M_t_analyte_withIS.btz %>% 
+  left_join(M_t_analyte_withIS.btz.zparam) %>% 
+  mutate(ng_per_cm3_zscore = (ng_per_cm3-ng_per_cm3.mean)/ng_per_cm3.sd)
+
+
+
+pp_btz_each <- ggplot(M_t_analyte_withIS.btz.z) +
+  
+  geom_line(aes(x = r_date, y=(ng_per_cm3_zscore), color = id), size = 1.5)+
+  facet_grid(id ~ .)+
+  scale_color_manual(labels = btz_plot_labs$My_Name, values = btz_plot_labs$Plot_color)+
+  ylab("Aerosol Concentration (Z-scored)")+
+  xlab("")+
+  theme_bw(base_size = 16)+
+  labs(color = "")
+  guides(color = guide_legend(override.aes = list(size = 3) ) )
+
+pp_btz_each
+
+
+png("btz_tseries_indv3.png", width=6, height=9,
+    units="in", res=1000, pointsize=2)
+pp_btz_each
+dev.off() 
+
+btzpool_ssa <- M_t_analyte_withIS.btz %>% 
+  dplyr::group_by(r_date) %>% 
+  dplyr::summarise(ng_per_cm3.sum = sum(ng_per_cm3))
+
+btzpool.mean = mean(btzpool_ssa$ng_per_cm3.sum)
+btzpool.sd = sd(btzpool_ssa$ng_per_cm3.sum)
+
+btzpool_ssa <- btzpool_ssa %>% 
+  mutate(ng_per_cm3.sum.z = (ng_per_cm3.sum-btzpool.mean)/btzpool.sd)
+
+btzpool <- chlor_hb_wt2+
+  geom_line(data = btzpool_ssa, aes(x = r_date, y = ng_per_cm3.sum.z), color = "red")+
+  geom_point(data = btzpool_ssa, aes(x = r_date, y = ng_per_cm3.sum.z, fill = "Benzothiazole Carbon Pool"), color = "red", shape = 23)
+
+btzpool
 
 ```
 

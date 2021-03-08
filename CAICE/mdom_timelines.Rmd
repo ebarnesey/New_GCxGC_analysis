@@ -564,7 +564,7 @@ IS_stability %>%
   geom_point()+
   ylim(0, 2) +
   xlim(0,2)
-  
+    
 
 
 
@@ -960,7 +960,7 @@ kath.plots$plot.l <- relevel(kath.plots$plot, "Post-Transportation \nDissolved O
 
 #library(gt)
 pal <- RColorBrewer::brewer.pal(10, "Spectral")
-pal_darker  <- pal %>% adjust_luminance(-1.0)
+#pal_darker  <- pal %>% adjust_luminance(-1.0)
 
 colorBlindBlack8  <- c("#000000", "#E69F00", "#56B4E9", "#009E73", 
                        "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -1004,6 +1004,20 @@ dev.off()
 pie charts
 
 ```{r}
+blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  strip.text.x = element_text(size = 16),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank(),
+  axis.text = element_blank(),
+  legend.text = element_text(size = 16),
+  plot.title=element_text(size=14, face="bold")
+  )
+
+
 kath.plots.pie <- kath.plots %>% 
   mutate(cat.pie = "Previously Present\n")
 
@@ -1084,29 +1098,51 @@ btz_mdom_list <- btz_info.mdom %>%
 
 mdom_amt_persamp <- 50 #ug
 unit <- 1000 #ug/mg, becuase mdom conc are in ug
-#pun_per_f <- 22.536 
+#pun_per_f <- 22.536  
 M_t_analyte_withIS_mdom.btz <- M_t_analyte_withIS_mdom %>% 
   left_join(btz_mdom_list, by = c("Compound.Name"= "MDOM_name")) %>% 
   filter(keep ==1) %>% 
+  mutate(ng_per_sample = vol_is_rawnorm/QF_mean) %>% 
   mutate(ng_per_ug = (vol_is_rawnorm/QF_mean)/mdom_amt_persamp) %>% 
   mutate(ng_per_L = ng_per_ug*unit*mdom_conc)
+
+M_t_analyte_withIS_mdom.btz.jbtz <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(My_Name == "Benzothiazole") %>% 
+  dplyr::select(Volume, File_num, IS_appropriate3, IS_vol3)
 
 M_t_analyte_withIS_mdom.btz %>% 
   ggplot(aes(x = r_date, y = ng_per_L, fill = My_Name)) +
   geom_col()
 
+M_t_analyte_withIS_mdom.btz <- M_t_analyte_withIS_mdom.btz %>% 
+  mutate(ug_per_L_corrected = ng_per_L/1000)
+
+btz_mdom_manquant <- read_csv("btz_mdom_manquant.csv")
+
+for(i in 1:nrow(M_t_analyte_withIS_mdom.btz)){
+  if(M_t_analyte_withIS_mdom.btz$My_Name[i]== "Benzothiazole"){
+    fname = M_t_analyte_withIS_mdom.btz$File_num[i]
+    
+    ss <- btz_mdom_manquant %>% 
+      filter(File == fname)
+    M_t_analyte_withIS_mdom.btz$ug_per_L_corrected[i]<- ss$ug_btz_per_L[1]
+    
+  }else{
+    next
+  }
+}
+
 
 
 btz_mean_conc.mdom <- M_t_analyte_withIS_mdom.btz %>% 
-  dplyr::select(My_Name, r_date, ng_per_L) %>% 
-  spread(My_Name, ng_per_L, fill = 0) %>% 
-  gather(key = "My_Name", value = "ng_per_L", -r_date) %>% 
+  dplyr::select(My_Name, r_date, ug_per_L_corrected) %>% 
+  spread(My_Name, ug_per_L_corrected, fill = 0) %>% 
+  gather(key = "My_Name", value = "ug_per_L_corrected", -r_date) %>% 
   group_by(My_Name) %>% 
-  dplyr::summarise(ng_per_L.mean = mean(ng_per_L), ng_per_L.sd = sd(ng_per_L)/1) %>% 
-  mutate(ug_per_L.mean = ng_per_L.mean/1e3) 
+  dplyr::summarise(ug_per_L.mean = mean(ug_per_L_corrected), ug_per_L.sd = sd(ug_per_L_corrected)/1) 
 
 btz_mean_conc.mdom <- btz_mean_conc.mdom %>% 
-  mutate(vol_frac_mdom = ng_per_L.mean/sum(btz_mean_conc.mdom$ng_per_L.mean, na.rm = TRUE))
+  mutate(vol_frac_mdom = ug_per_L.mean/sum(btz_mean_conc.mdom$ug_per_L.mean, na.rm = TRUE))
 
 
 combined.btz <- btz_mean_conc %>% 
@@ -1188,8 +1224,8 @@ pie.labs.ssa <- combined.btz.pie.ssa %>%
   mutate(width = 3)
 
 both.t <- combined.btz.pie.ssa %>% 
-  group_by(Label_name) %>% 
-  summarise(vol_frac_ssa = sum(vol_frac_ssa))
+  dplyr::group_by(Label_name) %>% 
+  dplyr::summarise(vol_frac_ssa = sum(vol_frac_ssa))
 
 extralabs.ssa <- data.frame(id = as.factor(c(17,18)), My_Name = c("Both Phases", "SSA Only"), Plot_color = c("grey50", "grey90"), vol_frac_ssa = both.t$vol_frac_ssa) %>% 
   mutate(group = "foundwhere") %>% 
@@ -1216,18 +1252,7 @@ t2 <- t1 +
 
 t2
 
-blank_theme <- theme_minimal()+
-  theme(
-  axis.title.x = element_blank(),
-  axis.title.y = element_blank(),
-  panel.border = element_blank(),
-  strip.text.x = element_text(size = 16),
-  panel.grid=element_blank(),
-  axis.ticks = element_blank(),
-  axis.text = element_blank(),
-  legend.text = element_text(size = 16),
-  plot.title=element_text(size=14, face="bold")
-  )
+
 
 pie_ssa <- ggplot(pie.labs.ssa)+
   geom_col(aes(x = group, y = vol_frac_ssa, fill = id))+
@@ -1256,8 +1281,8 @@ pie.labs.mdom <- combined.btz.pie.mdom %>%
   mutate(width = 3)
 
 both.tt <- combined.btz.pie.mdom %>% 
-  group_by(Label_name) %>% 
-  summarise(vol_frac_mdom = sum(vol_frac_mdom))
+  dplyr::group_by(Label_name) %>% 
+  dplyr::summarise(vol_frac_mdom = sum(vol_frac_mdom))
 
 extralabs.mdom <- data.frame(id = as.factor(c(17,19)), My_Name = c("Both Phases", "DOM Only"), Plot_color = c("grey50", "grey15"), vol_frac_mdom = both.tt$vol_frac_mdom) %>% 
   mutate(group = "foundwhere") %>% 
@@ -1272,6 +1297,8 @@ pie_mdom <- ggplot(pie.labs.mdom)+
   coord_polar("y")+
   blank_theme
 
+pie_mdom
+
 png("piemdom1.png", width=11, height=7,
     units="in", res=1000, pointsize=6)
 pie_mdom
@@ -1283,28 +1310,31 @@ combined pie chart
 ```{r}
 pie.labs.mdom.t <- pie.labs.mdom %>% 
   mutate(facet = "DOM") %>% 
-  rename(vol_frac = vol_frac_mdom)
+  dplyr::rename(vol_frac = vol_frac_mdom)
 
 pie.labs.ssa.t <- pie.labs.ssa %>% 
   mutate(facet = "SSA")%>% 
-  rename(vol_frac = vol_frac_ssa)
+  dplyr::rename(vol_frac = vol_frac_ssa)
 
 pie.labs.both <- rbind(pie.labs.ssa.t, pie.labs.mdom.t)
 
 pie.labs.both.n <- pie.labs.both %>% 
-  distinct(id, .keep_all = TRUE) %>% 
-  arrange(id)
+  dplyr::distinct(id, .keep_all = TRUE) %>% 
+  dplyr::arrange(id)
 
 btz.pie.b <- ggplot(pie.labs.both, aes(x = group, y = vol_frac, fill = id))+
   geom_col()+
   facet_grid(facets=. ~ facet)+
   scale_fill_manual(name = "", labels = pie.labs.both.n$My_Name, values = pie.labs.both.n$Plot_color)+
   coord_polar(theta="y") +
-  blank_theme
+  blank_theme+
+  guides(fill = guide_legend(override.aes = list(size = 4) ) )
+  # theme(legend.position = "bottom")+
+  # guides(fill=guide_legend(ncol=4))
   
 btz.pie.b
 
-png("pieboth1.png", width=13, height=5,
+png("pieboth9.png", width=10, height=5,
     units="in", res=1500, pointsize=2)
 btz.pie.b
 dev.off()
@@ -1322,6 +1352,24 @@ btz.stickchart <- btz_info.mdom %>%
   mutate(My_Name = factor(My_Name, My_Name)) %>% 
   mutate(pcol = factor(Plot_color, Plot_color)) 
 
+btz.stickchart.2 <- btz.stickchart
+
+for(i in 1:nrow(btz.stickchart.2)){
+  if(is.na(btz.stickchart.2$vol_frac_ssa[i])){
+    
+    btz.stickchart.2$vol_frac_ssa[i] <- -.13
+  }
+  
+  
+  if(is.na(btz.stickchart.2$vol_frac_mdom[i])){
+    
+    btz.stickchart.2$vol_frac_mdom[i] <- -.13
+  }
+  
+  
+}
+
+
 colorvals <- (btz.stickchart$Plot_color)#
 colorvals <- c("cornflowerblue", "darkslateblue", "deeppink2", "deepskyblue2","greenyellow", 
                "lawngreen", "lightseagreen", "maroon3", "mediumslateblue", "orange1", 
@@ -1333,17 +1381,19 @@ colornames
 
 coeff3 = 1/16
 
-stick <- btz.stickchart %>% 
+stick <- btz.stickchart.2 %>% 
   #arrange(desc(water_sol_mg_L)) %>% 
   #mutate(My_Name = factor(My_Name, My_Name)) %>% 
   #mutate(plot_color = factor(Plot_color, Plot_color)) %>% 
   ggplot()+
-  geom_point(aes(x = My_Name, y = vol_frac_ssa, fill = "SSA", color = Plot_color, stroke = 1.5), size = 4.2, shape = 22)+
-  geom_point(aes(x = My_Name, y = vol_frac_mdom, fill = "DOM", color = Plot_color, stroke = 1.5), size = 3.6, shape = 23)+
-  scale_fill_manual(name = "", values = c("grey15", "grey90"))+
+  geom_point(aes(x = My_Name, y = vol_frac_ssa, fill = "SSA", shape = "SSA", color = Plot_color, stroke = 1.5), size = 4.2)+
+  geom_point(aes(x = My_Name, y = vol_frac_mdom, fill = "DOM", shape = "DOM", color = Plot_color, stroke = 1.5), size = 3.6)+
+  
   scale_color_manual(values = colorvals, labels = colornames)+
   
-  geom_point(aes(x = My_Name, y = log(water_sol_mg_L)*coeff3), color = "steelblue4")+
+  geom_point(aes(x = My_Name, y = log(water_sol_mg_L)*coeff3, fill = "ZSolubility", shape = "ZSolubility"), size = 2)+
+  scale_fill_manual(name = "", labels = c("DOM", "SSA", "Solubility"), values = c("grey15", "grey90", "steelblue4"))+
+  scale_shape_manual(name = "", values = c(22, 23, 21), labels = c("DOM", "SSA", "Solubility"))+
   scale_y_continuous(
     
     # Features of the first axis
@@ -1356,10 +1406,12 @@ stick <- btz.stickchart %>%
   theme(axis.title.x.top = element_text(color = "steelblue4"))+
   guides(color = FALSE)+
   xlab("")+
-  coord_flip()
+  coord_flip(clip = "off")+
+  geom_text(aes(x = -Inf, y = -.13, label = "BDL"), vjust = 1.3) 
 
+stick
 
-png("stick.png", width=7, height=5.5,
+png("stick3.png", width=8, height=5.5,
     units="in", res=1500, pointsize=2)
 stick
 dev.off()
