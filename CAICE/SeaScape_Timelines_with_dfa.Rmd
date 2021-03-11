@@ -1273,6 +1273,11 @@ btzpool <- chlor_hb_wt2+
 
 btzpool
 
+png("btz_pool1.png", width=8, height=5,
+    units="in", res=1000, pointsize=2)
+btzpool
+dev.off() 
+
 ```
 
 
