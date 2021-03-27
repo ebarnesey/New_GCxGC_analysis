@@ -637,7 +637,7 @@ write.csv(corr_table_IS, file = "Internalstandard_correlation_matrix2.csv")
 
 
 ```{r IS_mapping}
-LRI_weight = 2
+LRI_weight = 10
 LRII_weight = 1
 
 LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
@@ -651,18 +651,18 @@ write.csv(IS_positions_avg, "IS_positions_avg_rel.csv")
 
 Analyte_positions_trial <- M_t_analyte_unique %>% 
   group_by(Compound.Name, File_num) %>% 
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor)+rt2_floor)
 
 # note filtering out three small blobs outside of RI window
 
 Analyte_positions <- M_t_analyte_unique %>% 
   filter(!is.na(LRI.I)) %>% 
   group_by(Compound.Name) %>% 
-  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = min(Retention.II..sec. - rt2_floor))
+  summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = min(Retention.II..sec. - rt2_floor)+ rt2_floor)
 
 Analyte_positions <- Analyte_positions %>% 
-  mutate(relative_LRI = LRI_avg/LRI1_avg) %>% 
-  mutate(relative_LRI2 = RI2/LRI2_avg)
+  mutate(relative_LRI = (LRI_avg/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (RI2/LRI2_avg)* LRII_weight)
 
 Analyte_pos_short <- Analyte_positions %>% 
   dplyr::select(relative_LRI, relative_LRI2)
@@ -675,8 +675,9 @@ IS_pos_short <- IS_positions_avg %>%
 #Old method, only using 1 nearest
 #testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
 
-# note 1.19 is the min radius at which every compound has at least one nearest
-testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 1.19)
+# note 1.59 is the min radius at which every compound has at least one nearest
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 1.59)
+
 
 
 Analyte_IS_Index <- data.frame(testnn$nn.idx)
@@ -816,10 +817,20 @@ for(i in 1:nrow(M_t_analyte_withIS)){
 #   mutate(vol_is_rawnorm = Volume/IS_vol)
 #   
 
+# note- this line of code is not working. not sure why.
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
+#   mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
 
-M_t_analyte_withIS <- M_t_analyte_withIS %>% 
-  mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
-  mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
+for(i in 1:nrow(M_t_analyte_withIS)){
+  M_t_analyte_withIS$IS_vol[i]= mean(c(M_t_analyte_withIS$IS_vol1[i], M_t_analyte_withIS$IS_vol2[i], M_t_analyte_withIS$IS_vol3[i]), na.rm = TRUE)
+  
+  M_t_analyte_withIS$IS_mean_norm[i]= mean(c(M_t_analyte_withIS$IS_mean_norm1[i], M_t_analyte_withIS$IS_mean_norm2[i], M_t_analyte_withIS$IS_mean_norm3[i]), na.rm = TRUE)
+  
+}
+
+
+
 
 M_t_analyte_withIS <- M_t_analyte_withIS %>% 
   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
@@ -1370,6 +1381,330 @@ ggplot()+
 
 ```
 ggplot(df, aes(x)) + stat_ecdf(geom = "step")
+
+Doing hierarchical clustering
+
+```{r}
+M_t_analyte_unique_IS.1.0filled <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS.2.0filled <- M_t_analyte_unique_IS %>% 
+  filter(IOP == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>% 
+  gather(key = "Compound.Name", value = "vol_is_rawnorm_ptnorm", -r_date)
+
+M_t_analyte_unique_IS.1.0filled.zparam <- M_t_analyte_unique_IS.1.0filled %>% 
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol_is_rawnorm_ptnorm.m = mean(vol_is_rawnorm_ptnorm), 
+                   vol_is_rawnorm_ptnorm.sd = sd(vol_is_rawnorm_ptnorm))
+
+M_t_analyte_unique_IS.2.0filled.zparam <- M_t_analyte_unique_IS.2.0filled %>% 
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol_is_rawnorm_ptnorm.m = mean(vol_is_rawnorm_ptnorm), 
+                   vol_is_rawnorm_ptnorm.sd = sd(vol_is_rawnorm_ptnorm))
+
+
+M_t_analyte_unique_IS.1.0filled.z <- M_t_analyte_unique_IS.1.0filled %>% 
+  left_join(M_t_analyte_unique_IS.1.0filled.zparam) %>% 
+  mutate(vol_is_rawnorm_ptnorm.z = (vol_is_rawnorm_ptnorm- vol_is_rawnorm_ptnorm.m)/vol_is_rawnorm_ptnorm.sd)
+
+M_t_analyte_unique_IS.2.0filled.z <- M_t_analyte_unique_IS.2.0filled %>% 
+  left_join(M_t_analyte_unique_IS.2.0filled.zparam) %>% 
+  mutate(vol_is_rawnorm_ptnorm.z = (vol_is_rawnorm_ptnorm- vol_is_rawnorm_ptnorm.m)/vol_is_rawnorm_ptnorm.sd)
+  
+top100_1 <- analyte_cumsum1 %>% 
+  arrange(desc(sum_ISrawnormvol)) 
+
+top100_1 <- top100_1[1:100,] %>% 
+  dplyr::select(Compound.Name) %>% 
+  mutate(top100 = TRUE)
+
+top100_2 <- analyte_cumsum2 %>% 
+  arrange(desc(sum_ISrawnormvol)) 
+
+top100_2 <- top100_2[1:100,] %>% 
+  dplyr::select(Compound.Name) %>% 
+  mutate(top100 = TRUE)
+  
+
+
+
+```
+
+Hierarchical clustering- IOP1
+
+```{r}
+library(dtwclust)
+
+df_long1 <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  left_join(top100_1) %>% 
+  filter(top100 == TRUE) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm)
+
+
+
+df_list1 <- as.list(utils::unstack(df_long1, vol_is_rawnorm_ptnorm ~ Compound.Name))
+
+df_list_z1 <- dtwclust::zscore(df_list1)
+
+#note- using DTW here because SBD was coming up with crazy results
+
+set.seed(20)
+cluster_dtw_h1 <-list()
+for (i in 2:20)
+{
+  cluster_dtw_h1[[i]] <- tsclust(df_list_z1, type = "h", k = i,  distance = "dtw", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+# take a look at the object
+cluster_dtw_h1[[5]]
+
+plot(cluster_dtw_h1[[8]], type = "sc")
+plot(cluster_dtw_h1[[7]], type = "sc")
+plot(cluster_dtw_h1[[6]], type = "sc")
+plot(cluster_dtw_h1[[5]], type = "sc")
+plot(cluster_dtw_h1[[4]], type = "sc")
+plot(cluster_dtw_h1[[3]], type = "sc")
+
+
+1
+cvi(cluster_dtw_h1[[2]], type = "valid")
+cvi(cluster_dtw_h1[[3]], type = "valid")
+cvi(cluster_dtw_h1[[4]], type = "valid")
+cvi(cluster_dtw_h1[[5]], type = "valid")
+cvi(cluster_dtw_h1[[6]], type = "valid")
+cvi(cluster_dtw_h1[[7]], type = "valid")
+cvi(cluster_dtw_h1[[8]], type = "valid")
+cvi(cluster_dtw_h1[[9]], type = "valid")
+
+#
+# from local min of silhouette, going with 6 clusters (for now)
+# link for understanding the params: https://rstudio-pubs-static.s3.amazonaws.com/474160_0761428e8683401e941a92a4177254a4.html
+
+fit1 <- cluster_dtw_h1[[6]]
+clustered_data1 <- cutree(fit1, k=6)
+clustered_data_tidy1 <- as.data.frame(as.table(clustered_data1)) %>% dplyr::glimpse()
+colnames(clustered_data_tidy1) <- c("Compound.Name","cluster")
+clustered_data_tidy1$Compound.Name <- as.character(clustered_data_tidy1$Compound.Name)
+glimpse(clustered_data_tidy1)
+table(clustered_data_tidy1$cluster)
+
+clustered_data_tidy1 <- clustered_data_tidy1 %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name))
+
+
+
+```
+
+
+```{r}
+cluster_1.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 1) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_2.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 2) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_3.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 3) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_4.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 4) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_5.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 5) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_6.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 6) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+
+cluster_all.1 <-  M_t_analyte_unique_IS.1.0filled %>% 
+  left_join(clustered_data_tidy1) %>% 
+  #filter(!is.na(cluster)) %>% 
+  group_by(r_date, cluster) %>% 
+  dplyr::summarise(cluster_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(r_date.f = as.factor(r_date))
+
+# note: fire is factor 
+cluster_all.1 %>% 
+  ggplot(aes(x = r_date, y = cluster_vol, fill = as.factor(cluster)))+
+  geom_col(position = "fill")
+
+cluster_all.1 %>% 
+  ggplot(aes(x = r_date, y = cluster_vol, fill = as.factor(cluster)))+
+  geom_col()
+
+
+# focus on factor 2: contains both phthalic acid and lev
+
+anth_1 <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  filter(Compound.Name == "1221_0832_blob_100")
+
+bb_1 <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+ggplot()+
+  geom_col(data = cluster_2.1, aes(x = r_date, y = cluster_vol.z))+
+  geom_line(data = bb_1, aes(x = r_date, y = vol_is_rawnorm_ptnorm), color = "red")+
+  geom_line(data = anth_1, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20), color = "yellow")
+
+```
+```{r}
+
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+df_long2 <- M_t_analyte_unique_IS.2.0filled.z %>% 
+  left_join(top100_2) %>% 
+  filter(top100 == TRUE) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm)
+
+
+
+df_list2 <- as.list(utils::unstack(df_long2, vol_is_rawnorm_ptnorm ~ Compound.Name))
+
+df_list_z2 <- dtwclust::zscore(df_list2)
+
+set.seed(20)
+cluster_dtw_h2 <-list()
+for (i in 2:20)
+{
+  cluster_dtw_h2[[i]] <- tsclust(df_list_z2, type = "h", k = i,  distance = "sbd", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+# take a look at the object
+cluster_dtw_h2[[4]]
+
+plot(cluster_dtw_h2[[8]], type = "sc")
+plot(cluster_dtw_h2[[7]], type = "sc")
+plot(cluster_dtw_h2[[6]], type = "sc")
+plot(cluster_dtw_h2[[5]], type = "sc")
+plot(cluster_dtw_h2[[4]], type = "sc")
+plot(cluster_dtw_h2[[3]], type = "sc")
+
+
+1
+cvi(cluster_dtw_h2[[2]], type = "valid")
+cvi(cluster_dtw_h2[[3]], type = "valid")
+cvi(cluster_dtw_h2[[4]], type = "valid")
+cvi(cluster_dtw_h2[[5]], type = "valid")
+cvi(cluster_dtw_h2[[6]], type = "valid")
+cvi(cluster_dtw_h2[[7]], type = "valid")
+cvi(cluster_dtw_h2[[8]], type = "valid")
+cvi(cluster_dtw_h2[[9]], type = "valid")
+
+
+# silhouette maximized at 4 clusters
+
+fit2 <- cluster_dtw_h2[[4]]
+clustered_data2 <- cutree(fit2, k=4)
+clustered_data_tidy2 <- as.data.frame(as.table(clustered_data2)) %>% dplyr::glimpse()
+colnames(clustered_data_tidy2) <- c("Compound.Name","cluster")
+clustered_data_tidy2$Compound.Name <- as.character(clustered_data_tidy2$Compound.Name)
+glimpse(clustered_data_tidy2)
+table(clustered_data_tidy2$cluster)
+
+clustered_data_tidy2 <- clustered_data_tidy2 %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name))
+
+
+
+
+```
+
+```{r}
+cluster_1.2 <- M_t_analyte_unique_IS.2.0filled %>%
+  left_join(clustered_data_tidy2) %>% 
+  filter(cluster == 1) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_2.2 <- M_t_analyte_unique_IS.2.0filled %>%
+  left_join(clustered_data_tidy2) %>% 
+  filter(cluster == 2) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_3.2 <- M_t_analyte_unique_IS.2.0filled %>%
+  left_join(clustered_data_tidy2) %>% 
+  filter(cluster == 3) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_4.2 <- M_t_analyte_unique_IS.2.0filled %>%
+  left_join(clustered_data_tidy2) %>% 
+  filter(cluster == 4) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
+cluster_all.2 <-  M_t_analyte_unique_IS.2.0filled %>% 
+  left_join(clustered_data_tidy2) %>% 
+  #filter(!is.na(cluster)) %>% 
+  group_by(r_date, cluster) %>% 
+  dplyr::summarise(cluster_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(r_date.f = as.factor(r_date))
+
+# note: fire is factor 3
+cluster_all.2 %>% 
+  ggplot(aes(x = r_date, y = cluster_vol, fill = as.factor(cluster)))+
+  geom_col(position = "fill")
+
+cluster_all.2 %>% 
+  ggplot(aes(x = r_date, y = cluster_vol, fill = as.factor(cluster)))+
+  geom_col()
+
+cluster_all.2 %>% 
+  ggplot(aes(x = r_date, y = cluster_vol, color = as.factor(cluster)))+
+  geom_line()
+  
+
+
+```
+
+```{r}
+com_info <- read_csv("Compiled_Compoundinfo_Blobtable_updated.csv")
+
+clustered_data_info1 <- clustered_data_tidy1 %>% 
+  left_join(com_info)
+
+clustered_data_info2 <- clustered_data_tidy2 %>% 
+  left_join(com_info)
+
+
+
+```
+
+
 
 Exploring unique compounds from each IOP
 

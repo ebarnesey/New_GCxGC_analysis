@@ -1280,6 +1280,20 @@ dev.off()
 
 ```
 
+```{r}
+me.th.btz <- M_t_analyte_withIS.btz %>% 
+  filter(Compound.Name == "20200803_1535_blob_764_") %>% 
+  dplyr::select(Compound.Name, r_date, Volume, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_cm3)
+
+
+
+
+```
+
 
 
 Adding fields to cumsum to reflect total org norm and IS normnorm so that factors can be weighted to equally emphasize things important at beginning and end of bloom

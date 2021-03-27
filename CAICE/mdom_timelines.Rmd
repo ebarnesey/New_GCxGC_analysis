@@ -1114,23 +1114,30 @@ M_t_analyte_withIS_mdom.btz %>%
   ggplot(aes(x = r_date, y = ng_per_L, fill = My_Name)) +
   geom_col()
 
+mdom_btz_manquant <- read_csv("btz_manquant_tseries_mdom.csv")
+
 M_t_analyte_withIS_mdom.btz <- M_t_analyte_withIS_mdom.btz %>% 
-  mutate(ug_per_L_corrected = ng_per_L/1000)
+  left_join(mdom_btz_manquant) %>% 
+  filter(File_num != "GCxGC_20200930_1548") %>% 
+  filter(File_num != "GCxGC_20200930_1740")
 
-btz_mdom_manquant <- read_csv("btz_mdom_manquant.csv")
-
-for(i in 1:nrow(M_t_analyte_withIS_mdom.btz)){
-  if(M_t_analyte_withIS_mdom.btz$My_Name[i]== "Benzothiazole"){
-    fname = M_t_analyte_withIS_mdom.btz$File_num[i]
-    
-    ss <- btz_mdom_manquant %>% 
-      filter(File == fname)
-    M_t_analyte_withIS_mdom.btz$ug_per_L_corrected[i]<- ss$ug_btz_per_L[1]
-    
-  }else{
-    next
-  }
-}
+# M_t_analyte_withIS_mdom.btz <- M_t_analyte_withIS_mdom.btz %>% 
+#   mutate(ug_per_L_corrected = ng_per_L/1000)
+# 
+# btz_mdom_manquant <- read_csv("btz_mdom_manquant.csv")
+# 
+# for(i in 1:nrow(M_t_analyte_withIS_mdom.btz)){
+#   if(M_t_analyte_withIS_mdom.btz$My_Name[i]== "Benzothiazole"){
+#     fname = M_t_analyte_withIS_mdom.btz$File_num[i]
+#     
+#     ss <- btz_mdom_manquant %>% 
+#       filter(File == fname)
+#     M_t_analyte_withIS_mdom.btz$ug_per_L_corrected[i]<- ss$ug_btz_per_L[1]
+#     
+#   }else{
+#     next
+#   }
+# }
 
 
 
@@ -1187,6 +1194,63 @@ dev.off()
   
 
 ```
+Pulling out just 7/24 because this is what is being reported
+```{r}
+M_t_analyte_withIS_mdom.btz.724 <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Sample_num == "MDOM_0724") %>% 
+  left_join(btz_info.mdom, by = c("Compound.Name"= "MDOM_name")) %>% 
+  dplyr::select(My_Name.y, ug_per_L_corrected)
+
+M_t_analyte_withIS_mdom.btz.me.th.btz <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Compound.Name == "20200929_1128_blob_5") %>% 
+  dplyr::select(Compound.Name,Sample_num, r_date, Volume, Mdom_amt_ug, mdom_conc, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_ug, ng_per_L, ug_per_L_corrected)
+
+M_t_analyte_withIS_mdom.butyl.btz <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Compound.Name == "20200929_1510_blob_694") %>% 
+  dplyr::select(Compound.Name,Sample_num, r_date, Volume, Mdom_amt_ug, mdom_conc, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_ug, ng_per_L, ug_per_L_corrected)
+
+M_t_analyte_withIS_mdom.3.methyl.3.one <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Compound.Name == "20200929_1128_blob_255") %>% 
+  dplyr::select(Compound.Name,Sample_num, r_date, Volume, Mdom_amt_ug, mdom_conc, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_ug, ng_per_L, ug_per_L_corrected)
+
+M_t_analyte_withIS_mdom.2.3h.Benzothiazolone <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Compound.Name == "20200929_1128_blob_654") %>% 
+  dplyr::select(Compound.Name,Sample_num, r_date, Volume, Mdom_amt_ug, mdom_conc, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_ug, ng_per_L, ug_per_L_corrected)
+
+M_t_analyte_withIS_mdom.phenylbtz <- M_t_analyte_withIS_mdom.btz %>% 
+  filter(Compound.Name == "20200929_1128_blob_747") %>% 
+  dplyr::select(Compound.Name,Sample_num, r_date, Volume, Mdom_amt_ug, mdom_conc, 
+                IS_appropriate1, IS_appropriate2, IS_appropriate3, IS_vol1,
+                IS_vol2, IS_vol3, IS_vol, vol_is_rawnorm, vol_rawnorm_total,
+                QF_mean,
+                ng_per_sample, ng_per_ug, ng_per_L, ug_per_L_corrected)
+
+mdom.dC18 <- IS_goodmatch_mdom %>% 
+  filter(Compound.Name == "dC18") %>% 
+  dplyr::select(Volume, Compound.Name, File_num)
+
+mdom.dC20 <- IS_goodmatch_mdom %>% 
+  filter(Compound.Name == "dC20") %>% 
+  dplyr::select(Volume, Compound.Name, File_num)
+
+```
+
 
 making pie graphs
 
@@ -1195,15 +1259,15 @@ combined.btz<- combined.btz %>%
   arrange(Label_name) 
 
 combined.btz.pie <- combined.btz %>% 
-  mutate(ymin.ssa = 0) %>% 
-  mutate(ymax.ssa = vol_frac_ssa) %>% 
-  mutate(ymin.mdom = 0) %>% 
-  mutate(ymax.mdom = vol_frac_mdom) %>% 
-  mutate(vol_frac_ssa = replace_na(vol_frac_ssa, 0)) %>% 
-  mutate(vol_frac_mdom = replace_na(vol_frac_mdom, 0)) %>% 
-  arrange(desc(vol_frac_ssa)) %>% 
-  arrange(Label_name) %>% 
-  mutate(id = as.factor(row_number()))
+  dplyr::mutate(ymin.ssa = 0) %>% 
+  dplyr::mutate(ymax.ssa = vol_frac_ssa) %>% 
+  dplyr::mutate(ymin.mdom = 0) %>% 
+  dplyr::mutate(ymax.mdom = vol_frac_mdom) %>% 
+  dplyr::mutate(vol_frac_ssa = replace_na(vol_frac_ssa, 0)) %>% 
+  dplyr::mutate(vol_frac_mdom = replace_na(vol_frac_mdom, 0)) %>% 
+  dplyr::arrange(desc(vol_frac_ssa)) %>% 
+  dplyr::arrange(Label_name) %>% 
+  dplyr::mutate(id = as.factor(row_number()))
 
 
 
@@ -1334,7 +1398,7 @@ btz.pie.b <- ggplot(pie.labs.both, aes(x = group, y = vol_frac, fill = id))+
   
 btz.pie.b
 
-png("pieboth9.png", width=10, height=5,
+png("pieboth10.png", width=10, height=5,
     units="in", res=1500, pointsize=2)
 btz.pie.b
 dev.off()
@@ -1411,7 +1475,7 @@ stick <- btz.stickchart.2 %>%
 
 stick
 
-png("stick3.png", width=8, height=5.5,
+png("stick4.png", width=8, height=5.5,
     units="in", res=1500, pointsize=2)
 stick
 dev.off()
