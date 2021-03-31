@@ -290,7 +290,7 @@ M_t_all_analytes_volcount <- M_t_all_analytes %>%
 # tracking the number of all analutes in
 M_t_all_analytes_ncount <- M_t_all_analytes %>% 
   count(File_num) %>% 
-  rename(total_num_analyte = n)
+  dplyr::rename(total_num_analyte = n)
 
 M_t_match_analytes_volcount <- M_t_analyte_unique %>% 
   group_by(File_num) %>% 
@@ -298,7 +298,7 @@ M_t_match_analytes_volcount <- M_t_analyte_unique %>%
 
 M_t_match_analytes_ncount <- M_t_analyte_unique %>% 
   count(File_num) %>% 
-  rename(total_num_analyte_match = n)
+  dplyr::rename(total_num_analyte_match = n)
 
 M_t_analyte_summary <- M_t_all_analytes_volcount %>% 
   left_join(M_t_all_analytes_ncount) %>% 
@@ -309,7 +309,7 @@ M_t_analyte_summary <- M_t_all_analytes_volcount %>%
 
 compound_pop <- M_t_analyte_unique %>% 
   count(Compound.Name) %>% 
-  rename(comp.n = n) %>% 
+  dplyr::rename(comp.n = n) %>% 
   mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
 #table(compound_pop$comp.n)
@@ -325,17 +325,17 @@ compound_pop <- M_t_analyte_unique %>%
 
 M_t_analyte_count <- M_t_all_analytes %>% 
   count(File_num) %>%
-  rename(total_num_analyte = n)
+  dplyr::rename(total_num_analyte = n)
 # 
 # # counting the number of unique analytes in each image
 num_analyte_unique <- M_t_analyte_unique %>%
   count(File_num) %>%
-  rename(unique.analyte = n)
+  dplyr::rename(unique.analyte = n)
 
 # counting the number based percent of compounds being traced in all 
 perct_comps_traced <- num_analyte_unique %>% 
    left_join(M_t_analyte_count) %>% 
-   mutate(pct_found = unique.analyte/total_num_analyte)
+   dplyr::mutate(pct_found = unique.analyte/total_num_analyte)
 # 
 #perct_comps_traced %>%
 #  ggplot(aes(y = pct_found))+
@@ -348,7 +348,7 @@ M_t_analyte_unique <- M_t_analyte_unique %>% left_join(num_analyte_unique)
 
 compound_pop <- M_t_analyte_unique %>% 
   count(Compound.Name) %>% 
-  rename(comp.n = n) %>% 
+  dplyr::rename(comp.n = n) %>% 
   mutate(pct_of_samp = (comp.n/max(comp.n)*100))
 
 table(compound_pop$comp.n)
@@ -1667,6 +1667,12 @@ cluster_4.2 <- M_t_analyte_unique_IS.2.0filled %>%
   group_by(r_date) %>% 
   summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
 
+cluster_na.2 <- M_t_analyte_unique_IS.2.0filled %>%
+  left_join(clustered_data_tidy2) %>% 
+  filter(is.na(cluster)) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+
 cluster_all.2 <-  M_t_analyte_unique_IS.2.0filled %>% 
   left_join(clustered_data_tidy2) %>% 
   #filter(!is.na(cluster)) %>% 
@@ -1674,7 +1680,7 @@ cluster_all.2 <-  M_t_analyte_unique_IS.2.0filled %>%
   dplyr::summarise(cluster_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
   mutate(r_date.f = as.factor(r_date))
 
-# note: fire is factor 3
+# note: fire is factor 3, urban is factor 2
 cluster_all.2 %>% 
   ggplot(aes(x = r_date, y = cluster_vol, fill = as.factor(cluster)))+
   geom_col(position = "fill")
@@ -1686,6 +1692,30 @@ cluster_all.2 %>%
 cluster_all.2 %>% 
   ggplot(aes(x = r_date, y = cluster_vol, color = as.factor(cluster)))+
   geom_line()
+
+
+
+anth_2 <- M_t_analyte_unique_IS.2.0filled.z %>% 
+  filter(Compound.Name == "1221_0832_blob_100")
+
+bb_2 <- M_t_analyte_unique_IS.2.0filled.z %>% 
+  filter(Compound.Name == "1202_1412_blob_1")
+
+# showing the fire factor
+ggplot()+
+  geom_col(data = cluster_2.2, aes(x = r_date, y = cluster_vol.z))+
+  geom_line(data = bb_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm), color = "red")+
+  geom_line(data = anth_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20), color = "yellow")
+
+ggplot()+
+  geom_col(data = cluster_3.2, aes(x = r_date, y = cluster_vol.z))+
+  geom_line(data = bb_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm), color = "red")+
+  geom_line(data = anth_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20), color = "yellow")
+
+ggplot()+
+  geom_col(data = cluster_na.2, aes(x = r_date, y = cluster_vol.z))+
+  geom_line(data = bb_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm), color = "red")+
+  geom_line(data = anth_2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20), color = "yellow")
   
 
 
