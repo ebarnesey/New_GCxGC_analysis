@@ -400,7 +400,7 @@ summary(M_t_analyte_summary$perct_volfound)
 # could use a moving window 
 ```
 
-The results of the library evaluation are promising, but reveal room for improvement.  Despite the fact that only 55% of the analyte compounds in each image match the library, the highest volume compounds are well traced- an average of 88% of total instrument response (used as a proxy for recovered mass) is traced in each image, and even the least well described file has 82% coverage.  The goal of 90% coverage has not been achieved, but as a first draft the library has exceeded expectations for achieving broad coverage. 
+The results of the library evaluation are promising, but reveal room for improvement.  Despite the fact that only 55% of the analyte compounds in each  image match the library, the highest volume compounds are well traced- an average of 88% of total instrument response (used as a proxy for recovered mass) is traced in each image, and even the least well described file has 82% coverage.  The goal of 90% coverage has not been achieved, but as a first draft the library has exceeded expectations for achieving broad coverage. 
 The histogram reveals that continuous tracking of compounds across the entire time series has not been fully achieved- while ~300 compounds were identified in all of the samples, another ~300 were identified in only 1 or 2 samples.  While samples are inconsistent and it is unsurprising that many compounds are either not present or present below detection limits in certain samples, the high number of compounds occuring in only one or two samples may indicate that there may be duplicate entries in the compound library. Additionally, as the graph *Average Blob Volume by Match Frequency* and the histogram of matched blobs llustrate, there are are a relatively high number of high volume peaks that appear to be present in ~half or fewer of the samples.  While it is possible for a compound to be present in high quantities in some samples and below detection limits in others, the frequency of these samples occuring at around half of the number of samples tested points to the possibility that some high volume blobs are being split between multiple duplicate mass spectral entries in the library. The compounds that occur in only a few samples should be investigated to determine whether they are low abundance compounds which are not present in other samples or whether there are duplicate entries of compounds leading to split assignments.  
 
 ### For Lindsay: graphing unique compounds in various ways
@@ -1463,6 +1463,7 @@ for (i in 2:20)
 # take a look at the object
 cluster_dtw_h1[[5]]
 
+plot(cluster_dtw_h1[[9]], type = "sc")
 plot(cluster_dtw_h1[[8]], type = "sc")
 plot(cluster_dtw_h1[[7]], type = "sc")
 plot(cluster_dtw_h1[[6]], type = "sc")
@@ -1480,13 +1481,20 @@ cvi(cluster_dtw_h1[[6]], type = "valid")
 cvi(cluster_dtw_h1[[7]], type = "valid")
 cvi(cluster_dtw_h1[[8]], type = "valid")
 cvi(cluster_dtw_h1[[9]], type = "valid")
+cvi(cluster_dtw_h1[[10]], type = "valid")
+cvi(cluster_dtw_h1[[11]], type = "valid")
+cvi(cluster_dtw_h1[[12]], type = "valid")
+cvi(cluster_dtw_h1[[13]], type = "valid")
 
 #
 # from local min of silhouette, going with 6 clusters (for now)
 # link for understanding the params: https://rstudio-pubs-static.s3.amazonaws.com/474160_0761428e8683401e941a92a4177254a4.html
 
-fit1 <- cluster_dtw_h1[[6]]
-clustered_data1 <- cutree(fit1, k=6)
+# note: using silhouette index there is a local max (what we want) at 8 factors
+# but by minimization of the DB index the optimum number of clusters is 9
+
+fit1 <- cluster_dtw_h1[[9]]
+clustered_data1 <- cutree(fit1, k=9)
 clustered_data_tidy1 <- as.data.frame(as.table(clustered_data1)) %>% dplyr::glimpse()
 colnames(clustered_data_tidy1) <- c("Compound.Name","cluster")
 clustered_data_tidy1$Compound.Name <- as.character(clustered_data_tidy1$Compound.Name)
@@ -1500,43 +1508,151 @@ clustered_data_tidy1 <- clustered_data_tidy1 %>%
 
 ```
 
+seeing what happens if I cluster just cluster 2
+
+```{r}
+
+df_long1.2 <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 2) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm)
+
+
+
+df_list1.2 <- as.list(utils::unstack(df_long1.2, vol_is_rawnorm_ptnorm ~ Compound.Name))
+
+df_list_z1.2 <- dtwclust::zscore(df_list1.2)
+
+#note- using DTW here because SBD was coming up with crazy results
+
+set.seed(20)
+cluster_dtw_h1.2 <-list()
+for (i in 2:20)
+{
+  cluster_dtw_h1.2[[i]] <- tsclust(df_list_z1.2, type = "h", k = i,  distance = "dtw", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+cvi(cluster_dtw_h1.2[[2]], type = "valid")
+cvi(cluster_dtw_h1.2[[3]], type = "valid")
+cvi(cluster_dtw_h1.2[[4]], type = "valid")
+cvi(cluster_dtw_h1.2[[5]], type = "valid")
+cvi(cluster_dtw_h1.2[[6]], type = "valid")
+
+fit1.2 <- cluster_dtw_h1.2[[4]]
+clustered_data1.2 <- cutree(fit1.2, k=4)
+clustered_data_tidy1.2 <- as.data.frame(as.table(clustered_data1.2)) %>% dplyr::glimpse()
+colnames(clustered_data_tidy1.2) <- c("Compound.Name","cluster")
+clustered_data_tidy1.2$Compound.Name <- as.character(clustered_data_tidy1.2$Compound.Name)
+glimpse(clustered_data_tidy1.2)
+table(clustered_data_tidy1.2$cluster)
+
+clustered_data_tidy1.2 <- clustered_data_tidy1.2 %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name)) %>% 
+  dplyr::rename("cluster.split" = cluster) %>% 
+  mutate(cluster.split = cluster.split + 9)
+
+
+clustered_data_tidy1 <- clustered_data_tidy1 %>% 
+  left_join(clustered_data_tidy1.2) %>% 
+  mutate(cluster.check = ifelse(cluster == 2, cluster.split, cluster)) %>% 
+  mutate(cluster = cluster.check) %>% 
+  dplyr::select(Compound.Name, cluster)
+
+
+```
+
 
 ```{r}
 cluster_1.1 <- M_t_analyte_unique_IS.1.0filled %>%
   left_join(clustered_data_tidy1) %>% 
   filter(cluster == 1) %>% 
   group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z1 = cluster_vol.z)
 
-cluster_2.1 <- M_t_analyte_unique_IS.1.0filled %>%
-  left_join(clustered_data_tidy1) %>% 
-  filter(cluster == 2) %>% 
-  group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+# cluster_2.1 <- M_t_analyte_unique_IS.1.0filled %>%
+#   left_join(clustered_data_tidy1) %>% 
+#   filter(cluster == 2) %>% 
+#   group_by(r_date) %>% 
+#   summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+#   dplyr::rename(cluster_vol.z2 = cluster_vol.z)
 
 cluster_3.1 <- M_t_analyte_unique_IS.1.0filled %>%
   left_join(clustered_data_tidy1) %>% 
   filter(cluster == 3) %>% 
   group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z3 = cluster_vol.z)
 
 cluster_4.1 <- M_t_analyte_unique_IS.1.0filled %>%
   left_join(clustered_data_tidy1) %>% 
   filter(cluster == 4) %>% 
   group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z4 = cluster_vol.z)
 
 cluster_5.1 <- M_t_analyte_unique_IS.1.0filled %>%
   left_join(clustered_data_tidy1) %>% 
   filter(cluster == 5) %>% 
   group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm)) %>% 
+  dplyr::rename(cluster_vol.z5 = cluster_vol.z)
 
 cluster_6.1 <- M_t_analyte_unique_IS.1.0filled %>%
   left_join(clustered_data_tidy1) %>% 
   filter(cluster == 6) %>% 
   group_by(r_date) %>% 
-  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z6 = cluster_vol.z)
+
+cluster_7.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 7) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z7 = cluster_vol.z)
+
+cluster_8.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 8) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z8 = cluster_vol.z)
+
+cluster_9.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 9) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z9 = cluster_vol.z)
+
+cluster_10.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 10) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z10 = cluster_vol.z)
+
+cluster_11.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 11) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z11 = cluster_vol.z)
+
+cluster_12.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 12) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z12 = cluster_vol.z)
+
+cluster_13.1 <- M_t_analyte_unique_IS.1.0filled %>%
+  left_join(clustered_data_tidy1) %>% 
+  filter(cluster == 13) %>% 
+  group_by(r_date) %>% 
+  summarise(cluster_vol.z = sum(vol_is_rawnorm_ptnorm))%>% 
+  dplyr::rename(cluster_vol.z13 = cluster_vol.z)
 
 
 cluster_all.1 <-  M_t_analyte_unique_IS.1.0filled %>% 
@@ -1559,19 +1675,81 @@ cluster_all.1 %>%
 # focus on factor 2: contains both phthalic acid and lev
 
 anth_1 <- M_t_analyte_unique_IS.1.0filled.z %>% 
-  filter(Compound.Name == "1221_0832_blob_100")
+  filter(Compound.Name == "1221_0832_blob_100") %>% 
+  dplyr::select(r_date, vol_is_rawnorm_ptnorm) %>% 
+  dplyr::rename(anthrovol = vol_is_rawnorm_ptnorm)
 
 bb_1 <- M_t_analyte_unique_IS.1.0filled.z %>% 
-  filter(Compound.Name == "1202_1412_blob_1")
+  filter(Compound.Name == "1202_1412_blob_1")%>% 
+  dplyr::select(r_date, vol_is_rawnorm_ptnorm) %>% 
+  dplyr::rename(bbvol = vol_is_rawnorm_ptnorm)
 
 ggplot()+
-  geom_col(data = cluster_2.1, aes(x = r_date, y = cluster_vol.z))+
-  geom_line(data = bb_1, aes(x = r_date, y = vol_is_rawnorm_ptnorm), color = "red")+
-  geom_line(data = anth_1, aes(x = r_date, y = vol_is_rawnorm_ptnorm*20), color = "yellow")
+  geom_col(data = cluster_10.1, aes(x = r_date, y = cluster_vol.z10))+
+  geom_line(data = bb_1, aes(x = r_date, y = bbvol), color = "red")+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20), color = "yellow")
+
+ggplot()+
+  geom_col(data = cluster_11.1, aes(x = r_date, y = cluster_vol.z11))+
+  geom_line(data = bb_1, aes(x = r_date, y = bbvol), color = "red")+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20), color = "yellow")
 
 ```
+Looking at wet season correlations
 ```{r}
 
+ M_t_a_u_0.1.hclust.forcor <- M_t_analyte_unique_IS.1.0filled %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm) %>% 
+  left_join(anth_1) %>% 
+  left_join(bb_1) %>% 
+  left_join(cluster_1.1) %>% 
+  #left_join(cluster_2.1) %>% 
+  left_join(cluster_3.1) %>% 
+  left_join(cluster_4.1) %>% 
+  left_join(cluster_5.1) %>% 
+  left_join(cluster_6.1) %>% 
+  left_join(cluster_7.1) %>% 
+  left_join(cluster_8.1) %>% 
+  left_join(cluster_9.1) %>%
+  left_join(cluster_10.1) %>%
+  left_join(cluster_11.1) %>%
+  left_join(cluster_12.1) %>%
+  left_join(cluster_13.1) %>%
+  left_join(IOP1_filtertimes) %>% 
+  dplyr::select(-c(File_num, AMZ_date, Date_num, r_date))
+
+M_t_a_u_0.1.hclust.cor <- as.data.frame(cor(M_t_a_u_0.1.hclust.forcor, method = "pearson", use = "pairwise.complete.obs")) %>% 
+  rownames_to_column(var = "Compound.Name")
+
+nrow_cortab1 <- nrow(M_t_a_u_0.1.hclust.cor)
+
+M_t_a_u_0.1.hclust.cor <- M_t_a_u_0.1.hclust.cor %>% 
+  dplyr::select(Compound.Name, anthrovol, bbvol, cluster_vol.z1, 
+                cluster_vol.z3, cluster_vol.z4, cluster_vol.z5,
+                cluster_vol.z6, cluster_vol.z7, cluster_vol.z8, cluster_vol.z9,
+                cluster_vol.z10, cluster_vol.z11, cluster_vol.z12, cluster_vol.z13,
+                AMS_PMF_1, AMS_PMF_2, AMS_PMF_3, AMS_PMF_4, 
+                AMS_PMF_5, AMS_PMF_6) %>% 
+  left_join(clustered_data_tidy1)
+
+corr_iop1_hclust <- M_t_a_u_0.1.hclust.cor %>% 
+  dplyr::select(cluster_vol.z1, 
+                cluster_vol.z3, cluster_vol.z4, cluster_vol.z5,
+                cluster_vol.z6, cluster_vol.z7, cluster_vol.z8, cluster_vol.z9,
+                cluster_vol.z10, cluster_vol.z11, cluster_vol.z12, cluster_vol.z13)
+
+corr_iop1_hclust.max <- colnames(corr_iop1_hclust)[max.col(corr_iop1_hclust,ties.method="first")]
+
+# manual_split_IOP1 <- read_csv("IOP1_correlationtab_hclust_withcor_edit1.csv") %>% 
+#   dplyr::select(Compound.Name, Assigned_option_3)
+
+M_t_a_u_0.1.hclust.cor$max_corr <- corr_iop1_hclust.max
+
+# M_t_a_u_0.1.hclust.cor %>% 
+#   left_join(manual_split_IOP1)
+
+write.csv(M_t_a_u_0.1.hclust.cor, "IOP1_hclust_corr_inspection_12cluster_formansplit.csv")
+
 
 
 
@@ -1579,6 +1757,130 @@ ggplot()+
 
 ```
 
+```{r}
+
+```
+
+
+Visualizing different factors with other tracers
+
+```{r}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+n = 12
+cols_1 = gg_color_hue(n)
+
+dev.new(width = 4, height = 4)
+plot(1:n, pch = 16, cex = 2, col = cols)
+```
+
+
+```{r}
+manual_split_IOP1 <- read_csv("IOP1_hclust_corr_inspection_12cluster_split.csv") %>% 
+  dplyr::select(Compound.Name, assigned_cluster)
+
+M_t_analyte_unique_IS.1.0filled.hclust <- M_t_analyte_unique_IS.1.0filled %>% 
+  left_join(clustered_data_tidy1) %>% 
+  left_join(manual_split_IOP1)
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, 
+             fill = as.factor(assigned_cluster)))+
+  geom_col()
+
+IOP1_cluster_frac <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  group_by(assigned_cluster) %>% 
+  summarise(summedvol = sum(vol_is_rawnorm_ptnorm))
+
+
+# going in descending order of volume
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 9) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_1[8])+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_2*.2, 
+                                         color = "AMS MOOOA"))+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*10, color = "Urban"))+
+geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
+  scale_color_manual(values = c("green4", "red", "black"))+
+  ggtitle("Cluster 9- unclear what this is")
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 11) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_1[10])+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_1*.8, 
+                                         color = "AMS IEPOX"))+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_2*.8, 
+                                         color = "AMS MOOOA"))+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20, color = "Urban"))+
+geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
+  scale_color_manual(values = c("green1", "green4", "red", "black"))+
+  ggtitle("Cluster 11 Urban Plume Influenced")
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 10) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_1[9])+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_4*.8, 
+                                         color = "AMS BBOA"))+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_5*.8, 
+                                         color = "AMS AROM"))+
+  #geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20, color = "Urban"))+
+geom_line(data = bb_1, aes(x = r_date, y = bbvol*1.3, color = "BB"))+
+  scale_color_manual(values = c("brown", "grey30", "red"))+
+  ggtitle("Cluster 10 Fire Influenced")
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 12) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_1[11])+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_1*.8, 
+                                         color = "AMS IEPOX"))+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_2*.8, 
+                                         color = "AMS MOOOA"))+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20, color = "Urban"))+
+geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
+  scale_color_manual(values = c("green1", "green4", "red", "black"))+
+  ggtitle("Cluster 12 Anthro-TBD")
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 8) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_1[7])+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_1*.8, 
+                                         color = "AMS IEPOX"))+
+  geom_line(data = IOP1_filtertimes, aes(x = r_date, y = AMS_PMF_5*.8, 
+                                         color = "AMS AROM"))+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*20, color = "Urban"))+
+geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
+  scale_color_manual(values = c("brown", "green1", "red", "black"))+
+  ggtitle("Cluster 8 Anthro-TBD")
+
+
+
+
+
+
+
+
+
+```
+Exploring cluster dynamics and variance with cluster option 3
+```{r}
+M_t_analyte_unique_IS.1.0filled.z <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  left_join(manual_split_IOP1)
+
+M_t_analyte_u
+
+
+
+
+
+```
 
 
 
@@ -1597,7 +1899,7 @@ df_list_z2 <- dtwclust::zscore(df_list2)
 
 set.seed(20)
 cluster_dtw_h2 <-list()
-for (i in 2:20)
+for (i in 2:40)
 {
   cluster_dtw_h2[[i]] <- tsclust(df_list_z2, type = "h", k = i,  distance = "sbd", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
 }
@@ -1622,12 +1924,16 @@ cvi(cluster_dtw_h2[[6]], type = "valid")
 cvi(cluster_dtw_h2[[7]], type = "valid")
 cvi(cluster_dtw_h2[[8]], type = "valid")
 cvi(cluster_dtw_h2[[9]], type = "valid")
+cvi(cluster_dtw_h2[[10]], type = "valid")
+cvi(cluster_dtw_h2[[11]], type = "valid")
+cvi(cluster_dtw_h2[[12]], type = "valid")
+cvi(cluster_dtw_h2[[13]], type = "valid")
 
 
-# silhouette maximized at 4 clusters
+# silhouette maximized at 10 clusters
 
-fit2 <- cluster_dtw_h2[[4]]
-clustered_data2 <- cutree(fit2, k=4)
+fit2 <- cluster_dtw_h2[[10]]
+clustered_data2 <- cutree(fit2, k=10)
 clustered_data_tidy2 <- as.data.frame(as.table(clustered_data2)) %>% dplyr::glimpse()
 colnames(clustered_data_tidy2) <- c("Compound.Name","cluster")
 clustered_data_tidy2$Compound.Name <- as.character(clustered_data_tidy2$Compound.Name)
