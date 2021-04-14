@@ -1421,7 +1421,10 @@ top100_1 <- analyte_cumsum1 %>%
 
 top100_1 <- top100_1[1:100,] %>% 
   dplyr::select(Compound.Name) %>% 
-  mutate(top100 = TRUE)
+  mutate(top100 = TRUE) 
+
+top100_1.1 <- top100_1 %>% 
+  dplyr::rename("top100.1" = top100)
 
 top100_2 <- analyte_cumsum2 %>% 
   arrange(desc(sum_ISrawnormvol)) 
@@ -1429,6 +1432,12 @@ top100_2 <- analyte_cumsum2 %>%
 top100_2 <- top100_2[1:100,] %>% 
   dplyr::select(Compound.Name) %>% 
   mutate(top100 = TRUE)
+
+top100_2.2 <- top100_2 %>% 
+  dplyr::rename("top100.2" = top100)
+
+top100_comparison <- top100_1.1 %>% 
+  full_join(top100_2.2)
   
 
 
@@ -1815,6 +1824,16 @@ geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   ggtitle("Cluster 9- unclear what this is")
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 9) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  ggplot(aes(x = 1, y = vol.t, fill = Compound.Name)) +
+  geom_col(color = "black")+
+  ggtitle("Cluster 9- unclear what this is")
+
+
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 11) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
   geom_col(fill = cols_1[10])+
@@ -1826,6 +1845,23 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
 geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("green1", "green4", "red", "black"))+
   ggtitle("Cluster 11 Urban Plume Influenced")
+
+M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 11) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  ggplot(aes(x = 1, y = vol.t, fill = Compound.Name)) +
+  geom_col(color = "black")+
+  guides(fill = FALSE)+
+  ggtitle("Cluster 11- unclear what this is")
+
+M_t_analyte_unique_IS.1.0filled.hclust.11 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 11) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 10) %>% 
@@ -1842,6 +1878,14 @@ geom_line(data = bb_1, aes(x = r_date, y = bbvol*1.3, color = "BB"))+
   scale_color_manual(values = c("brown", "grey30", "grey 60", "red"))+
   ggtitle("Cluster 10 Fire Influenced")
 
+M_t_analyte_unique_IS.1.0filled.hclust.10 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 10) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 12) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -1854,6 +1898,14 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
 geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("green1", "green4", "red", "black"))+
   ggtitle("Cluster 12 Anthro-TBD")
+
+M_t_analyte_unique_IS.1.0filled.hclust.12 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 12) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 8) %>% 
@@ -1868,6 +1920,14 @@ geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("brown", "green1", "red", "black"))+
   ggtitle("Cluster 8 -TBD")
 
+M_t_analyte_unique_IS.1.0filled.hclust.8 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 8) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 7) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -1881,6 +1941,15 @@ geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("brown", "green1", "red", "black"))+
   ggtitle("Cluster 7 -TBD")
 
+
+M_t_analyte_unique_IS.1.0filled.hclust.7 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 7) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 1) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -1893,6 +1962,14 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
 geom_line(data = bb_1, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("green1", "green4", "red", "black"))+
   ggtitle("Cluster 1 -TBD")
+
+M_t_analyte_unique_IS.1.0filled.hclust.1 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 1) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 3) %>% 
@@ -1920,6 +1997,14 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
   scale_color_manual(values = c("brown", "green2"))+
   ggtitle("Cluster 3 - LOOOA highest cor")
 
+M_t_analyte_unique_IS.1.0filled.hclust.3 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 3) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 4) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -1932,6 +2017,14 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
 geom_line(data = bb_1, aes(x = r_date, y = bbvol*.5, color = "BB"))+
   scale_color_manual(values = c("grey30", "red", "black"))+
   ggtitle("Cluster 4 - not corr with anything")
+
+M_t_analyte_unique_IS.1.0filled.hclust.4 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 4) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 13) %>% 
@@ -1946,6 +2039,17 @@ geom_line(data = bb_1, aes(x = r_date, y = bbvol*.5, color = "BB"))+
   scale_color_manual(values = c("green1", "green4", "red", "black"))+
   ggtitle("Cluster 13 - anthroinfluence")
 
+
+M_t_analyte_unique_IS.1.0filled.hclust.13 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 13) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
+
+
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   filter(assigned_cluster == 6) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -1958,6 +2062,14 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
 geom_line(data = bb_1, aes(x = r_date, y = bbvol*.5, color = "BB"))+
   scale_color_manual(values = c("blue4", "grey70", "red", "black"))+
   ggtitle("Cluster 6 - bb influence")
+
+M_t_analyte_unique_IS.1.0filled.hclust.6 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 6) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 
 
@@ -1989,18 +2101,61 @@ M_t_analyte_unique_IS.1.0filled.hclust %>%
   scale_color_manual(values = c("green1", "green3"))+
   ggtitle("Cluster 5 - Less Oxidized Biogenic")
 
+M_t_analyte_unique_IS.1.0filled.hclust.5 <- M_t_analyte_unique_IS.1.0filled.hclust %>% 
+  filter(assigned_cluster == 5) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 
 
 
 ```
-Exploring cluster dynamics and variance with cluster option 3
+
+Exploring cluster dynamics and variance with cluster option 9
 ```{r}
-M_t_analyte_unique_IS.1.0filled.z <- M_t_analyte_unique_IS.1.0filled.z %>% 
-  left_join(manual_split_IOP1)
-
-M_t_analyte_u
 
 
+M_t_analyte_unique_IS.1.0filled.z.c <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  left_join(manual_split_IOP1) %>% 
+  left_join(clustered_data_tidy1) %>% 
+  left_join(analyte_cumsum1)
+
+M_t_analyte_unique_IS.1.0filled.z.c %>% 
+  filter(cluster == 9) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm.z, color = Compound.Name))+
+  geom_line()
+
+M_t_analyte_unique_IS.1.0filled.z.c %>% 
+  filter(assigned_cluster == 9) %>% 
+  #filter(cumsum_ISrawnorm > .0005) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm.z, color = Compound.Name))+
+  geom_line()
+
+M_t_analyte_unique_IS.1.0filled.z.c %>% 
+  filter(assigned_cluster == 9) %>% 
+  filter(cumsum_ISrawnorm > .0005) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm.z, color = Compound.Name))+
+  geom_line()
+
+table(clustered_data_tidy1$cluster)
+table(manual_split_IOP1$assigned_cluster)
+
+M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  left_join(manual_split_IOP1) %>% 
+  filter(assigned_cluster == 9) %>% 
+  ggplot(aes(x = r_date, y = Volume, color = Compound.Name))+
+  geom_line()
+
+M_t_analyte_unique_IS %>% 
+  filter(IOP == 1) %>% 
+  left_join(manual_split_IOP1) %>% 
+  filter(assigned_cluster == 9) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm, color = Compound.Name))+
+  geom_line()
 
 
 
@@ -2301,6 +2456,14 @@ geom_line(data = bb_2, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("blue1", "blue4",  "red", "black"))+
   ggtitle("Cluster 4- BB")
 
+M_t_analyte_unique_IS.2.0filled.hclust.4 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 4) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 3) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -2311,6 +2474,14 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   #geom_line(data = bb_2, aes(x = r_date, y = bbvol, color = "BB"))+
   scale_color_manual(values = c("green1", "black"))+
   ggtitle("Cluster 3- Urban/IEPOX")
+
+M_t_analyte_unique_IS.2.0filled.hclust.3 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 3) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 7) %>% 
@@ -2325,6 +2496,14 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   scale_color_manual(values = c("green1", "green3"))+
   ggtitle("Cluster 7- LOOOA/IEPOX")
 
+M_t_analyte_unique_IS.2.0filled.hclust.7 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 7) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 5) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -2337,6 +2516,14 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   geom_line(data = bb_2, aes(x = r_date, y = bbvol*.02, color = "BB"))+
   scale_color_manual(values = c("blue4", "red"))+
   ggtitle("Cluster 5- maybe mobboa related?")
+
+M_t_analyte_unique_IS.2.0filled.hclust.5 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 5) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
 
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 6) %>% 
@@ -2351,6 +2538,14 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   scale_color_manual(values = c("green1", "red"))+
   ggtitle("Cluster 6- total mystery, closest is IEPOX")
 
+M_t_analyte_unique_IS.2.0filled.hclust.6 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 6) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 1) %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
@@ -2364,11 +2559,28 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   scale_color_manual(values = c("green1", "black"))+
   ggtitle("Cluster 1- slightly IEPOX related")
 
+M_t_analyte_unique_IS.2.0filled.hclust.1 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 1) %>%
+  group_by(Compound.Name) %>% 
+  dplyr::summarise(vol.t = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(pct_of_signal =100* vol.t/sum(vol.t)) %>% 
+  arrange(desc(pct_of_signal)) %>% 
+  dplyr::select(Compound.Name, pct_of_signal)
+
 
 
 
 
 ```
+
+number distribution of dry season clusters
+
+```{r}
+table(clustered_data_tidy2$cluster)
+table(manual_split_IOP2$assigned_cluster)
+
+```
+
 
 
 ```{r}
@@ -2472,7 +2684,499 @@ IOP2_hclust_overlap_summary %>%
 
 
 ```
+looking at the diurnal variability of each cluster- IOP1
 
+```{r}
+
+M_t_analyte_unique_IS.1.0filled.z.tod <- M_t_analyte_unique_IS.1.0filled.z %>% 
+  left_join(bt_sum_iop1) %>% 
+  group_by(cluster, T_O_D) %>% 
+  summarise(z.vol.mean = mean(vol_is_rawnorm_ptnorm.z), z.vol.sd = sd(vol_is_rawnorm_ptnorm.z))
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 1) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 1")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 3) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 3")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 4) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 4")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 5) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 5")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 6) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 6")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 7) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 7")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 8) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 8")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 9) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 9")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 10) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 10")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 11) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 11")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 12) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 12")+
+  ylim(-1.5, 1.5)
+
+M_t_analyte_unique_IS.1.0filled.z.tod %>% 
+  filter(cluster == 13) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 factor 13")+
+  ylim(-1.5, 1.5)
+
+
+  
+M_t_analyte_unique_IS.1.0filled.z %>% 
+  filter(Compound.Name == "1202_1412_blob_1") %>%
+  left_join(bt_sum_iop1) %>% 
+  group_by(T_O_D) %>% 
+  summarise(z.vol.mean = mean(vol_is_rawnorm_ptnorm.z), z.vol.sd = sd(vol_is_rawnorm_ptnorm.z)) %>% 
+  ggplot(aes(x = T_O_D, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP1 Levoglucosan")+
+  ylim(-1.5, 1.5)
+
+
+
+
+
+
+```
+
+```{r}
+M_t_analyte_unique_IS.2.0filled.z.tod <- M_t_analyte_unique_IS.2.0filled.z %>% 
+  left_join(clustered_data_tidy2) %>% 
+  left_join(bt_sum_iop2) %>% 
+  group_by(cluster, T_O_D) %>% 
+  summarise(z.vol.mean = mean(vol_is_rawnorm_ptnorm.z), z.vol.sd = sd(vol_is_rawnorm_ptnorm.z), time = median(hour(r_date)))
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 4) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 4")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 3) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 3")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 7) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 7")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 5) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 5")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 6) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 6")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 1) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 1")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 2) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 2")+
+  ylim(-2.5, 2.5)
+
+M_t_analyte_unique_IS.2.0filled.z.tod %>% 
+  filter(cluster == 10) %>% 
+  ggplot(aes(x = time, y = z.vol.mean, fill = z.vol.mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin = z.vol.mean - z.vol.sd, ymax= z.vol.mean+ z.vol.sd), 
+                width = .5, position = position_dodge(.9))+
+  ggtitle("IOP2 factor 10")+
+  ylim(-2.5, 2.5)
+
+
+
+
+
+
+```
+
+now making dataframe that is all of the compounds Z scored by time of day- both IOPs
+
+```{r}
+M_t_a_u_1_0_TODz.params <- M_t_analyte_unique_IS.1.0filled %>% 
+  left_join(bt_sum_iop1) %>% 
+  group_by(Compound.Name, T_O_D) %>% 
+  summarise(vol.TOD.mean = mean(vol_is_rawnorm_ptnorm), vol.TOD.sd = sd(vol_is_rawnorm_ptnorm))
+
+M_t_a_u_2_0_TODz.params <- M_t_analyte_unique_IS.2.0filled %>% 
+  left_join(bt_sum_iop2) %>% 
+  group_by(Compound.Name, T_O_D) %>% 
+  summarise(vol.TOD.mean = mean(vol_is_rawnorm_ptnorm), vol.TOD.sd = sd(vol_is_rawnorm_ptnorm))
+
+M_t_a_u_1_0_TODz <- M_t_analyte_unique_IS.1.0filled %>% 
+  left_join(bt_sum_iop1) %>% 
+  left_join(M_t_a_u_1_0_TODz.params) %>% 
+  mutate(vol.TOD.z = (vol_is_rawnorm_ptnorm-vol.TOD.mean)/vol.TOD.sd) %>% 
+  mutate(vol.TOD.z = ifelse(vol.TOD.sd ==0, 0, vol.TOD.z))
+
+M_t_a_u_2_0_TODz <- M_t_analyte_unique_IS.2.0filled %>% 
+  left_join(bt_sum_iop2) %>% 
+  left_join(M_t_a_u_2_0_TODz.params) %>% 
+  mutate(vol.TOD.z = (vol_is_rawnorm_ptnorm-vol.TOD.mean)/vol.TOD.sd)%>% 
+  mutate(vol.TOD.z = ifelse(vol.TOD.sd ==0, 0, vol.TOD.z))
+
+M_t_a_u_1_0_TODz.top100 <- M_t_a_u_1_0_TODz %>% 
+  left_join(top100_1) %>% 
+  filter(top100 == TRUE)
+
+M_t_a_u_2_0_TODz.top100 <- M_t_a_u_2_0_TODz %>% 
+  left_join(top100_2) %>% 
+  filter(top100 == TRUE)
+  
+
+
+
+
+```
+IOP1 clustering based on TOD normalized time series
+
+```{r}
+df_long1.tod <- M_t_a_u_1_0_TODz.top100 %>% 
+  dplyr::select(Compound.Name, r_date, vol.TOD.z)
+
+
+
+df_list1.tod <- as.list(utils::unstack(df_long1.tod, vol.TOD.z ~ Compound.Name))
+
+df_list_z1.tod <- dtwclust::zscore(df_list1.tod)
+
+set.seed(20)
+cluster_dtw_h1.tod <-list()
+for (i in 2:40)
+{
+  cluster_dtw_h1.tod[[i]] <- tsclust(df_list_z1.tod, type = "h", k = i,  distance = "sbd", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+# take a look at the object
+cluster_dtw_h1.tod[[4]]
+
+plot(cluster_dtw_h1.tod[[8]], type = "sc")
+plot(cluster_dtw_h1.tod[[7]], type = "sc")
+plot(cluster_dtw_h1.tod[[6]], type = "sc")
+plot(cluster_dtw_h1.tod[[5]], type = "sc")
+plot(cluster_dtw_h1.tod[[4]], type = "sc")
+plot(cluster_dtw_h1.tod[[3]], type = "sc")
+
+
+1
+cvi(cluster_dtw_h1.tod[[2]], type = "valid")
+cvi(cluster_dtw_h1.tod[[3]], type = "valid")
+cvi(cluster_dtw_h1.tod[[4]], type = "valid")
+cvi(cluster_dtw_h1.tod[[5]], type = "valid")
+cvi(cluster_dtw_h1.tod[[6]], type = "valid")
+cvi(cluster_dtw_h1.tod[[7]], type = "valid")
+ttt <- data.frame(cvi(cluster_dtw_h1.tod[[7]], type = "valid"))
+cvi(cluster_dtw_h1.tod[[8]], type = "valid")
+cvi(cluster_dtw_h1.tod[[9]], type = "valid")
+cvi(cluster_dtw_h1.tod[[10]], type = "valid")
+cvi(cluster_dtw_h1.tod[[11]], type = "valid")
+cvi(cluster_dtw_h1.tod[[12]], type = "valid")
+cvi(cluster_dtw_h1.tod[[13]], type = "valid")
+
+
+# silhouette maximized at 7 clusters, DB star local min at 5, 
+
+fit1.tod <- cluster_dtw_h1.tod[[7]]
+clustered_data1.tod <- cutree(fit1.tod, k=7)
+clustered_data_tidy1.tod <- as.data.frame(as.table(clustered_data1.tod)) %>% dplyr::glimpse()
+colnames(clustered_data_tidy1.tod) <- c("Compound.Name","cluster")
+clustered_data_tidy1.tod$Compound.Name <- as.character(clustered_data_tidy1.tod$Compound.Name)
+glimpse(clustered_data_tidy1.tod)
+table(clustered_data_tidy1.tod$cluster)
+
+clustered_data_tidy1.tod <- clustered_data_tidy1.tod %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name))
+
+
+```
+```{r}
+#looking just at cluster 2
+
+M_t_a_u_1_0_TODz %>% 
+  left_join(clustered_data_tidy1.tod) %>% 
+  filter(cluster == 2) %>%
+  group_by(r_date) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot(aes(x = r_date, y =(mvol.ntod)))+
+  geom_col()+
+  geom_line(data = anth_1, aes(x = r_date, y = anthrovol*100), color = "grey30")+
+  geom_line(data = bb_1, aes(x = r_date, y = bbvol*10), color = "red")
+
+clustered_data_tidy1_comp <- clustered_data_tidy1.tod %>% 
+  rename("cluster.tod" = cluster) %>% 
+  left_join(clustered_data_tidy1)
+
+table(clustered_data_tidy1_comp[,2:3])
+
+# this is validating 10-13 as anthro independent of correlations in diural var- 2 11 compounds are outside and everything else is in 2
+
+
+
+```
+now correcting and clustering the IOP2 compounds (likely to be a lot more interesting)
+
+```{r}
+df_long2.tod <- M_t_a_u_2_0_TODz.top100 %>% 
+  dplyr::select(Compound.Name, r_date, vol.TOD.z) 
+
+
+
+df_list2.tod <- as.list(utils::unstack(df_long2.tod, vol.TOD.z ~ Compound.Name))
+
+df_list_z2.tod <- dtwclust::zscore(df_list2.tod)
+
+set.seed(20)
+cluster_dtw_h2.tod <-list()
+for (i in 2:40)
+{
+  cluster_dtw_h2.tod[[i]] <- tsclust(df_list_z2.tod, type = "h", k = i,  distance = "sbd", control = hierarchical_control(method = "complete"), seed = 590, preproc = NULL, args = tsclust_args(dist = list(window.size = 5L)))
+}
+
+# take a look at the object
+cluster_dtw_h2.tod[[4]]
+
+plot(cluster_dtw_h2.tod[[8]], type = "sc")
+plot(cluster_dtw_h2.tod[[7]], type = "sc")
+plot(cluster_dtw_h2.tod[[6]], type = "sc")
+plot(cluster_dtw_h2.tod[[5]], type = "sc")
+plot(cluster_dtw_h2.tod[[4]], type = "sc")
+plot(cluster_dtw_h2.tod[[3]], type = "sc")
+
+
+1
+cvi(cluster_dtw_h2.tod[[2]], type = "valid")
+cvi(cluster_dtw_h2.tod[[3]], type = "valid")
+cvi(cluster_dtw_h2.tod[[4]], type = "valid")
+cvi(cluster_dtw_h2.tod[[5]], type = "valid")
+cvi(cluster_dtw_h2.tod[[6]], type = "valid")
+cvi(cluster_dtw_h2.tod[[7]], type = "valid")
+#ttt <- data.frame(cvi(cluster_dtw_h1.tod[[7]], type = "valid"))
+cvi(cluster_dtw_h2.tod[[8]], type = "valid")
+cvi(cluster_dtw_h2.tod[[9]], type = "valid")
+cvi(cluster_dtw_h2.tod[[10]], type = "valid")
+cvi(cluster_dtw_h2.tod[[11]], type = "valid")
+cvi(cluster_dtw_h2.tod[[12]], type = "valid")
+cvi(cluster_dtw_h2.tod[[13]], type = "valid")
+
+
+# silhouette maximized at 7 clusters, DB star local min at 8, going with 8 
+
+fit2.tod <- cluster_dtw_h2.tod[[8]]
+clustered_data2.tod <- cutree(fit2.tod, k=8)
+clustered_data_tidy2.tod <- as.data.frame(as.table(clustered_data2.tod)) %>% dplyr::glimpse()
+colnames(clustered_data_tidy2.tod) <- c("Compound.Name","cluster")
+clustered_data_tidy2.tod$Compound.Name <- as.character(clustered_data_tidy2.tod$Compound.Name)
+glimpse(clustered_data_tidy2.tod)
+table(clustered_data_tidy2.tod$cluster)
+
+clustered_data_tidy2.tod <- clustered_data_tidy2.tod %>% 
+  mutate(Compound.Name = sub('.', '', Compound.Name))
+
+```
+```{r, message= FALSE}
+clustered_data_tidy2_comp <- clustered_data_tidy2.tod %>% 
+  rename("cluster.tod" = cluster) %>% 
+  left_join(clustered_data_tidy2)
+
+# looking at the 2 BB related factors
+
+p4 <- M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2.tod) %>% 
+  filter(cluster == 4) %>%
+  group_by(r_date) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot(aes(x = r_date, y =(mvol.ntod)))+
+  geom_col()+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*10), color = "grey30")+
+  geom_line(data = bb_2, aes(x = r_date, y = bbvol*.5), color = "red")
+
+p5 <- M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2.tod) %>% 
+  filter(cluster == 8) %>%
+  group_by(r_date) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot(aes(x = r_date, y =(mvol.ntod)))+
+  geom_col()+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*10), color = "grey30")+
+  geom_line(data = bb_2, aes(x = r_date, y = bbvol*.5), color = "red")
+
+p4
+p5
+
+M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2.tod) %>% 
+  filter(cluster == 8|cluster == 4) %>%
+  group_by(r_date, cluster) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y =(mvol.ntod), fill = as.factor(cluster)), position = "dodge")+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*10), color = "grey30")+
+  geom_line(data = bb_2, aes(x = r_date, y = bbvol*.5), color = "red")
+
+M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster.tod == 7) %>%
+  #filter(cluster == 3) %>%
+  group_by(r_date, cluster) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y =(mvol.ntod), fill = as.factor(cluster)), position = "dodge")+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*10), color = "grey30")+
+  geom_line(data = bb_2, aes(x = r_date, y = bbvol*.5), color = "red")
+
+M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster.tod == 7) %>%
+  filter(cluster == 3) %>%
+  group_by(r_date, cluster) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y =(mvol.ntod), fill = as.factor(cluster)), position = "dodge")+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*20), color = "grey30")
+
+M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster.tod == 7) %>%
+  filter(cluster == 7) %>%
+  group_by(r_date, cluster) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y =(mvol.ntod), fill = as.factor(cluster)), position = "dodge")+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*20), color = "grey30")
+
+M_t_a_u_2_0_TODz %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster.tod == 3) %>%
+  #filter(cluster == 7) %>%
+  group_by(r_date, cluster.tod) %>% 
+  summarise(mvol.ntod = mean(vol.TOD.z)) %>% 
+  ggplot()+
+  geom_col(aes(x = r_date, y =(mvol.ntod), fill = as.factor(cluster.tod)), position = "dodge")+
+  geom_line(data = anth_2, aes(x = r_date, y = anthrovol*20), color = "grey30")
+
+
+table(clustered_data_tidy2_comp[,2:3])
+
+
+```
 
 
 Exploring unique compounds from each IOP

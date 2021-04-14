@@ -388,7 +388,7 @@ compiled_comp_info_mdom.findable <- compiled_comp_info_mdom %>%
   dplyr::select(Compound.Name, Identifiable)
 
 #id.tags <- data.frame("Identifiable"= c(TRUE, NA), ID)
-
+nrow(compiled_comp_info.findable)/nrow(compiled_comp_info_mdom)
 compiled_comp_info_mdom <- compiled_comp_info_mdom %>% 
   left_join(compiled_comp_info_mdom.findable) %>% 
   mutate(tic = 1)
@@ -405,7 +405,7 @@ compiled_comp_info_mdom %>%
   labs(fill = "",
        x = NULL,
        y = NULL) + 
-  ggtitle("991 Novel and Identifiable Submicron SSA Compounds- SeaScape")
+  ggtitle("991 Novel and Identifiable Submicron MDOM Compounds- SeaScape")
 
 ```
 

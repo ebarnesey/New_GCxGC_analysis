@@ -216,14 +216,14 @@ soa_fig <- M_t_voc_quantcheck %>%
   ggplot()+
   geom_point(aes(x = r_date, y= vol_zscore, shape = Class, color = quant.proxy.f), size = 2)+
   geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f))+
-  scale_color_manual(name = "Compound Name", labels = c("styrene", "naphthalene", "benzophenone", "monoterpenes", "1-chlorooctane", "beta cyclocitral"), values = c("darkorange2", "grey50", "tomato3", "aquamarine3", "mediumseagreen", "dodgerblue3"))+
+  scale_color_manual(name = "Compound Name", labels = c("styrene", "naphthalene", "benzophenone", "monoterpenes", "1-chlorooctane", "beta cyclocitral"), values = c("darkorange2", "gold", "tomato3", "aquamarine3", "mediumseagreen", "dodgerblue3"))+
   guides(shape=guide_legend(title="Source Group"))+
   xlab("")+
   ylab("z-Scored Gas Concentration")+
   theme_bw(base_size = 16)
 
 # note: chlor_hb from SeaScape_timelines script, this wont work without it
-soatseries1 <- ggarrange(chlor_hb2, soa_fig, heights = c(10, 14), 
+soatseries1 <- ggarrange(chlor_hb_wt2, soa_fig, heights = c(10, 14), 
           labels = c("A", "B"),
           ncol = 1, nrow = 2, align = "v")
 
@@ -264,7 +264,7 @@ soa_fig.b <- M_t_voc_quantcheck %>%
 
 soa_fig.b
 
-soatseries2 <- ggarrange(chlor_hb2, soa_fig.a, soa_fig.b, heights = c(9, 14, 14), 
+soatseries2 <- ggarrange(chlor_hb_wt2, soa_fig.a, soa_fig.b, heights = c(9, 14, 14), 
           labels = c("A", "B", "C"),
           ncol = 1, nrow = 3, align = "v")
 
