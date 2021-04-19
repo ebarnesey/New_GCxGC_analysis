@@ -2193,6 +2193,8 @@ plot(cluster_dtw_h2[[5]], type = "sc")
 plot(cluster_dtw_h2[[4]], type = "sc")
 plot(cluster_dtw_h2[[3]], type = "sc")
 
+plot(cluster_dtw_h2[[10]], type = "sc")
+
 
 1
 cvi(cluster_dtw_h2[[2]], type = "valid")
@@ -2559,6 +2561,19 @@ M_t_analyte_unique_IS.2.0filled.hclust %>%
   scale_color_manual(values = c("green1", "black"))+
   ggtitle("Cluster 1- slightly IEPOX related")
 
+M_t_analyte_unique_IS.2.0filled.hclust %>% 
+  filter(assigned_cluster == 2) %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm)) +
+  geom_col(fill = cols_2[2])+
+  geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_1*.02, 
+                                         color = "AMS IEPOX"))+
+  #geom_line(data = IOP2_filtertimes, aes(x = r_date, y = AMS_PMF_2*.2, 
+   #                                      color = "AMS LOOOA"))+
+  #geom_line(data = anth_2, aes(x = r_date, y = anthrovol*8, color = "Urban"))+
+  geom_line(data = bb_2, aes(x = r_date, y = bbvol*.02, color = "BB"))+
+  scale_color_manual(values = c("green1", "red"))+
+  ggtitle("Cluster 2- slightly BB related?")
+
 M_t_analyte_unique_IS.2.0filled.hclust.1 <- M_t_analyte_unique_IS.2.0filled.hclust %>% 
   filter(assigned_cluster == 1) %>%
   group_by(Compound.Name) %>% 
@@ -2636,18 +2651,34 @@ Overlap analysis of compounds in each cluster
 
 ```{r}
  hclust_overlap_cat <- read_csv("Cluster_Inspection_1_edit1.csv") %>% 
-  dplyr::select(Compound.Name, Overlap_Class)
+  dplyr::select(Compound.Name, Overlap_Class, influence_type_1, influence_type_2) 
 
 M_t_analyte_unique_IS.1.0filled.hclust.o <- M_t_analyte_unique_IS.1.0filled.hclust %>%
   left_join(hclust_overlap_cat)
 
+overlap_analysis_hclust_labels <- read_csv("label_codes_overlap_analysis.csv")
+
 IOP1_hclust_overlap_summary <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
   group_by(Overlap_Class) %>% 
   dplyr::summarise(Class_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
-  mutate(Class_vol.n = Class_vol/sum(Class_vol))
+  mutate(Class_vol.n = Class_vol/sum(Class_vol)) %>% 
+  left_join(overlap_analysis_hclust_labels)
 
 IOP2_hclust_overlap_summary <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
   group_by(Overlap_Class) %>% 
+  dplyr::summarise(Class_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(Class_vol.n = Class_vol/sum(Class_vol))%>% 
+  left_join(overlap_analysis_hclust_labels)
+
+IOP1_hclust_type_summary <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
+  mutate(influence_type_1 = ifelse(is.na(influence_type_1), "x", influence_type_1)) %>% 
+  group_by(influence_type_1) %>% 
+  dplyr::summarise(Class_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
+  mutate(Class_vol.n = Class_vol/sum(Class_vol))
+
+IOP2_hclust_type_summary <- M_t_analyte_unique_IS.2.0filled.hclust.o %>%
+  mutate(influence_type_2 = ifelse(is.na(influence_type_2), "x", influence_type_2)) %>%
+  group_by(influence_type_2) %>% 
   dplyr::summarise(Class_vol = sum(vol_is_rawnorm_ptnorm)) %>% 
   mutate(Class_vol.n = Class_vol/sum(Class_vol))
 
@@ -2680,15 +2711,131 @@ IOP2_hclust_overlap_summary %>%
   ggtitle("Overlap Analysis Dry Season")
 
 
+M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
+  mutate(influence_type_1 = ifelse(is.na(influence_type_1), "x", influence_type_1)) %>% 
+  ggplot(aes(x = 1, y = vol_is_rawnorm_ptnorm, 
+             fill = influence_type_1))+
+  geom_col()+
+  scale_fill_manual(name = "", values = c("orange", "grey", "green"), 
+                    labels = c("Biomass Burning Influenced", 
+                               "Urban Plume Influenced", "Background Biogenic"))+
+  ylab("Cumulative Season Signal")+
+  ggtitle("Wet Season")+
+  theme_bw()
+
+M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  mutate(influence_type_2 = ifelse(is.na(influence_type_2), "x", influence_type_2)) %>% 
+  ggplot(aes(x = 1, y = vol_is_rawnorm_ptnorm, 
+             fill = influence_type_2))+
+  geom_col()+
+  #coord_polar()+
+  scale_fill_manual(name = "", values = c("orange", "grey", "green"), 
+                    labels = c("Biomass Burning Influenced", 
+                               "Urban Plume Influenced", "Background Biogenic"))+
+  ylab("Cumulative Season Signal")+
+  ggtitle("Dry Season")+
+  theme_bw()
+
+
+
+
+IOP1_hclust_overlap_summary %>% 
+  left_join(overlap_analysis_hclust_labels) %>% 
+  ggplot(aes(x = Cat_IOP1, y = Class_vol.n, fill = Overlap_Class))+
+  geom_col()+
+  ylab("Cumulative Season Signal")+
+  ggtitle("Wet Season")
+
+IOP2_hclust_overlap_summary %>% 
+  left_join(overlap_analysis_hclust_labels) %>% 
+  ggplot(aes(x = Cat_IOP2, y = Class_vol.n, fill = Overlap_Class))+
+  geom_col()+
+  ylab("Cumulative Season Signal")+
+  ggtitle("Dry Season")
 
 
 
 ```
+looking at the median and the mean of each season cluster
+```{r}
+daysigsum_1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
+  group_by(r_date) %>% 
+  summarise(total_org_vol = sum(vol_is_rawnorm_ptnorm))
+
+totalorgvol1 <- sum(daysigsum_1$total_org_vol)
+
+daysigsum_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  group_by(r_date) %>% 
+  summarise(total_org_vol = sum(vol_is_rawnorm_ptnorm))
+
+totalorgvol1 <- sum(daysigsum_1$total_org_vol)
+
+influence_type_frac_tseries_1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
+  mutate(influence_type_1 = ifelse(is.na(influence_type_1), "x", influence_type_1)) %>% 
+  group_by(r_date, influence_type_1) %>% 
+  summarise(dayvol_it = sum(vol_is_rawnorm_ptnorm)) %>% 
+  left_join(daysigsum_1) %>% 
+  mutate(sig_fraction = dayvol_it/total_org_vol) 
+
+influence_type_frac_tseries_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  mutate(influence_type_2 = ifelse(is.na(influence_type_2), "x", influence_type_2)) %>% 
+  group_by(r_date, influence_type_2) %>% 
+  summarise(dayvol_it = sum(vol_is_rawnorm_ptnorm)) %>% 
+  left_join(daysigsum_2) %>% 
+  mutate(sig_fraction = dayvol_it/total_org_vol)
+
+# influence_type_weighed1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>%
+#   group_by(influence_type_1) %>% 
+#   summarise(sum_cat = sum(vol_is_rawnorm_ptnorm)) %>% 
+#   mutate(mean_cont.wt = sum_cat/totalorgvol1)
+  
+
+influence_type_stats_1 <- influence_type_frac_tseries_1 %>% 
+  group_by(influence_type_1) %>% 
+  summarise(mean_cont = mean(sig_fraction), med_cont = median(sig_fraction)) %>% 
+  left_join(IOP1_hclust_type_summary)
+
+influence_type_stats_2 <- influence_type_frac_tseries_2 %>% 
+  group_by(influence_type_2) %>% 
+  summarise(mean_cont = mean(sig_fraction), med_cont = median(sig_fraction)) %>% 
+  left_join(IOP2_hclust_type_summary)
+
+influence_type_stats_1 %>% 
+  ggplot()+
+  geom_col(aes(x = influence_type_1, y = mean_cont, fill = influence_type_1, color = "Unweighted Average"))+
+  geom_col(aes(x = paste(influence_type_1, "_med", sep = ""), y = med_cont, fill = influence_type_1, color = "Median"), size = 2)+
+  geom_col(aes(x = paste(influence_type_1, "_wt.mean", sep = ""), y = Class_vol.n, fill = influence_type_1, color = "Weighted Average"), size = 2)+
+  scale_fill_manual(name = "", values = c("orange", "grey", "green"), 
+                    labels = c("Biomass Burning Influenced", 
+                               "Urban Plume Influenced", "Background Biogenic"))+
+  ylab("Fraction Daily Organic Signal")+
+  ggtitle("Wet Season")
+
+influence_type_stats_2 %>% 
+  ggplot()+
+  geom_col(aes(x = influence_type_2, y = mean_cont, fill = influence_type_2, color = "Unweighted Average"))+
+  geom_col(aes(x = paste(influence_type_2, "_med", sep = ""), y = med_cont, fill = influence_type_2, color = "Median"), size = 2)+
+  geom_col(aes(x = paste(influence_type_2, "_wt.mean", sep = ""), y = Class_vol.n, fill = influence_type_2, color = "Weighted Average"), size = 2)+
+  scale_fill_manual(name = "", values = c("orange", "grey", "green"), 
+                    labels = c("Biomass Burning Influenced", 
+                               "Urban Plume Influenced", "Background Biogenic"))+
+  ylab("Fraction Daily Organic Signal")+
+  ggtitle("Dry Season")
+
+
+```
+
+
+
+
+
+
+
 looking at the diurnal variability of each cluster- IOP1
 
 ```{r}
 
-M_t_analyte_unique_IS.1.0filled.z.tod <- M_t_analyte_unique_IS.1.0filled.z %>% 
+M_t_analyte_unique_IS.1.0filled.z.tod <- M_t_analyte_unique_IS.1.0filled.z.c %>% 
   left_join(bt_sum_iop1) %>% 
   group_by(cluster, T_O_D) %>% 
   summarise(z.vol.mean = mean(vol_is_rawnorm_ptnorm.z), z.vol.sd = sd(vol_is_rawnorm_ptnorm.z))
@@ -3177,7 +3324,70 @@ table(clustered_data_tidy2_comp[,2:3])
 
 
 ```
+Question- does factor 3 IOP2 need to be split? looking at actual tseries
+```{r}
 
+M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster == 3) %>% 
+    ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, 
+               fill = as.factor(cluster.tod)))+
+    geom_col()
+
+M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster == 3) %>% 
+  filter(cluster.tod == 7) %>% 
+    ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, ))+
+    geom_col(fill = "purple")+
+      geom_line(data = anth_2, aes(x = r_date, y = anthrovol*30), 
+                color = "black")
+
+M_t_analyte_unique_IS.2.0filled.z %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster == 3) %>% 
+  filter(cluster.tod == 7) %>% 
+    ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm.z, color = Compound.Name))+
+    geom_line()+
+      geom_line(data = anth_2, aes(x = r_date, y = anthrovol*30), 
+                color = "black")
+
+M_t_analyte_unique_IS.2.0filled.z %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster == 3) %>% 
+  filter(cluster.tod == 3) %>% 
+    ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm.z, color = Compound.Name))+
+    geom_line()+
+      geom_line(data = anth_2, aes(x = r_date, y = anthrovol*30), 
+                color = "black")
+
+
+
+# checking just 2 methylclycericacid
+
+j.2mga.2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  filter(Compound.Name == "1128_1901_blob_703")
+
+M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  left_join(clustered_data_tidy2_comp) %>% 
+  filter(cluster == 3) %>% 
+  filter(cluster.tod == 3) %>% 
+    ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, ))+
+    geom_col(fill = "green")+
+      geom_line(data = anth_2, aes(x = r_date, y = anthrovol*30), 
+                color = "black")+
+  geom_line(data = j.2mga.2, aes(x = r_date, y = vol_is_rawnorm_ptnorm*30), 
+                color = "orange")
+
+
+
+
+
+
+
+
+```
+Conclusion from this: the urban cluster needs to be split. Not reliable. 
 
 Exploring unique compounds from each IOP
 

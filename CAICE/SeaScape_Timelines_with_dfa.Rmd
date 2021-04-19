@@ -1267,16 +1267,49 @@ btzpool.sd = sd(btzpool_ssa$ng_per_cm3.sum)
 btzpool_ssa <- btzpool_ssa %>% 
   mutate(ng_per_cm3.sum.z = (ng_per_cm3.sum-btzpool.mean)/btzpool.sd)
 
+silox.z <- M_t_analyte_withIS %>% 
+  filter(Compound.Name == "20200803_1535_blob_3_fb") %>% 
+  mutate(vol.z = (vol_is_rawnorm_ptnorm-mean(vol_is_rawnorm_ptnorm))/sd(vol_is_rawnorm_ptnorm)) %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_rawnorm_ptnorm, vol.z)
+
+oiltrac.z <- M_t_analyte_withIS %>% 
+  filter(Compound.Name == "20200803_1535_blob_33_oil") %>% 
+  mutate(voloil.z = (vol_is_rawnorm_ptnorm-mean(vol_is_rawnorm_ptnorm))/sd(vol_is_rawnorm_ptnorm)) %>% 
+  dplyr::select(r_date, Compound.Name, vol_is_rawnorm_ptnorm, voloil.z)
+  
+
 btzpool <- chlor_hb_wt2+
   geom_line(data = btzpool_ssa, aes(x = r_date, y = ng_per_cm3.sum.z), color = "red")+
-  geom_point(data = btzpool_ssa, aes(x = r_date, y = ng_per_cm3.sum.z, fill = "Benzothiazole Carbon Pool"), color = "red", shape = 23)
+  geom_point(data = btzpool_ssa, aes(x = r_date, y = ng_per_cm3.sum.z, fill = "Benzothiazole Carbon Pool"), color = "red", shape = 23, size = 2)+
+  geom_line(data = silox.z, aes(x = r_date, y = vol.z), color = "orange")+
+  geom_point(data = silox.z, aes(x = r_date, y = vol.z, 
+              fill = "Cycloheptasiloxane, \ntetradecamethyl-"), shape = 22,
+             color = "orange", size = 2)+
+  geom_line(data = oiltrac.z, aes(x = r_date, y = voloil.z), color = "purple")+
+  scale_fill_manual(values = c("red", "orange"))
 
 btzpool
 
-png("btz_pool1.png", width=8, height=5,
+siloxbtz <- silox.z %>% 
+  left_join(btzpool_ssa) %>% 
+  left_join(oiltrac.z)
+
+siloxbtz %>% 
+  ggplot(aes(x = vol.z, y = ng_per_cm3.sum.z))+
+  geom_point()
+
+
+
+png("btz_pool2.png", width=8, height=5,
     units="in", res=1000, pointsize=2)
 btzpool
 dev.off() 
+
+RSQUARE = function(y_actual,y_predict){
+  cor(y_actual,y_predict)^2
+}
+
+RSQUARE(siloxbtz$vol.z, siloxbtz$ng_per_cm3.sum)
 
 ```
 
