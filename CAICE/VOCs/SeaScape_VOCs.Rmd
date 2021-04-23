@@ -32,6 +32,8 @@ library(MARSS)
 library(utils)
 
 
+library(ggpubr)
+
 #install.packages("survival")
 
 library(lattice)
@@ -397,6 +399,74 @@ btztseries2
 dev.off() 
 
 ```
+
+Revised figure for site visit
+```{r}
+M_t_voc_quantcheck.sv <- read_csv("vocs_quant_raw_sitevisit.csv") %>% 
+  mutate(r_date =    mdy_hm(Sample_Time))
+
+dms_isop_z <- bt_sum_voc %>% 
+  dplyr::select(r_date, Isoprene, DMS) %>% 
+  mutate(Isoprene.z = (Isoprene-mean(dms_isop_z$Isoprene, 
+                                     na.rm = TRUE))/
+                         sd(dms_isop_z$Isoprene, na.rm = TRUE)) %>% 
+  mutate(DMS.z = (DMS-mean(dms_isop_z$DMS, 
+                                     na.rm = TRUE))/
+                         sd(dms_isop_z$DMS, na.rm = TRUE)) %>% 
+  filter(!is.na(Isoprene))
+
+
+
+
+btz_fig.a.sv <- M_t_voc_quantcheck.sv %>% 
+  #filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class_SV == "Anthropogenic") %>% 
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 16, size = 2.4)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), size = 1.3)+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  scale_color_manual(name = "Anthropogenic Compounds", labels = c("styrene", "naphthalene", "benzophenone"), values = c("darkorange2", "darkgoldenrod", "tomato3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("Gas Concentration\n(Z-Scored)")+
+  theme_bw(base_size = 16)
+
+btz_fig.a.sv
+
+btz_fig.b.sv <- M_t_voc_quantcheck.sv %>% 
+  #filter(quant.proxy != "benzothiazole") %>% 
+  filter(Class_SV == "Biogenic") %>%
+  ggplot()+
+  geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 17, size = 2.4)+
+  geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), size = 1.3)+
+  geom_point(data = dms_isop_z, aes(x = r_date, y = DMS.z, color = "a"), shape = 17, size = 2.4)+
+  geom_line(data = dms_isop_z, aes(x = r_date, y = DMS.z, color = "a"), size = 1.3)+
+  geom_point(data = dms_isop_z, aes(x = r_date, y = Isoprene.z, color = "b"), shape = 17, size = 2.4)+
+  geom_line(data = dms_isop_z, aes(x = r_date, y = Isoprene.z, color = "b"), size = 1.3)+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  scale_color_manual(name = "Biogenic Compounds", labels = c("1-chlorooctane", "DMS", "isoprene", "beta cyclocitral"), values = c( "slateblue3", "mediumseagreen", "turquoise3", "dodgerblue3"))+
+  guides(shape=guide_legend(title="Source Group"))+
+  xlab("")+
+  ylab("Gas Concentration\n(Z-Scored)")+
+  theme_bw(base_size = 16)+
+  theme(axis.text.x = element_blank())
+
+btz_fig.b.sv
+
+btztseries2.sv <- ggarrange(chlor_hb_wt2, btz_fig.b.sv, btz_fig.a.sv, heights = c(8, 10, 10), 
+          labels = c("A", "B", "C"),
+          ncol = 1, nrow = 3, align = "v")
+
+btztseries2.sv
+
+png("btz_tseries4.sv.png", width=11, height=10,
+    units="in", res=1000, pointsize=2)
+btztseries2.sv
+dev.off() 
+
+
+```
+
 # quant comparison vocus 
 
 ```{r}

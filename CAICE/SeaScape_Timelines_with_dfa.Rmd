@@ -33,6 +33,8 @@ library("Hmisc")
 library(MARSS)
 library(utils)
 
+#install.packages("scico")
+library(scico)
 
 #install.packages("survival")
 
@@ -995,6 +997,61 @@ write.csv(M_t_analyte_withIS_wide, "Barnes_SeaScape_NascentSSA.csv")
 
 ```
 
+Colors for btz plotting
+
+```{r}
+gg_color_btzshared <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 55, c = 100)[1:n]
+}
+
+n = 6
+cols_btzshared = gg_color_btzshared(n)
+
+dev.new(width = 4, height = 4)
+plot(1:n, pch = 16, cex = 2, col = cols_btzshared)
+
+gg_color_btzssa <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 75, c = 100)[1:n]
+}
+
+n = 9
+cols_btzssa = gg_color_btzssa(n)
+
+dev.new(width = 4, height = 4)
+plot(1:n, pch = 16, cex = 2, col = cols_btzssa)
+
+
+scico_palette_show()
+
+imola <- scico(6, palette = 'imola')
+
+dev.new(width = 4, height = 4)
+plot(1:5, pch = 16, cex = 2, col = imola.dk)
+
+buda <- scico(6, palette = 'buda')
+
+dev.new(width = 4, height = 4)
+plot(1:9, pch = 16, cex = 2, col = buda.lt)
+
+print(hawaii)
+print(buda)
+
+#library(colorspace)
+
+imola.dk <- darken(imola, amount = .05)
+imola.lt <- lighten(imola, amount = .2)
+
+buda.lt <- lighten(scico(9, palette = 'buda'), amount = .2)
+
+print(buda.lt)
+print(imola)
+
+
+
+```
+
 
 Quantifying benzothiazoles
 
@@ -1158,8 +1215,8 @@ btz_mean_conc <- M_t_analyte_withIS.btz %>%
 
 btz_mean_conc <- btz_mean_conc%>% 
   mutate(vol_frac_ssa = ng_per_m3.mean/sum(btz_mean_conc$ng_per_m3.mean, na.rm = TRUE)) %>% 
-  arrange((vol_frac_ssa)) %>% 
-  mutate(id = as.factor(row_number()))
+  dplyr::arrange((vol_frac_ssa)) %>% 
+  dplyr::mutate(id = as.factor(row_number()))
 
 btz_plotcols <- btz_info %>% 
   dplyr::select(My_Name, Plot_color)
@@ -1213,7 +1270,7 @@ btztseries1 <- ggarrange(chlor_hb_wt, pp_btz2, heights = c(9, 16),
           ncol = 1, nrow = 2, align = "v")
 
 
-png("btz_tseries4.png", width=9, height=10,
+png("btz_tseries5.png", width=9, height=10,
     units="in", res=1000, pointsize=2)
 btztseries1
 dev.off() 
