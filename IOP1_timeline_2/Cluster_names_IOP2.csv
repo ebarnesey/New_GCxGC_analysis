@@ -1,0 +1,11 @@
+assigned_cluster,cluster_name,cluster_col,cluster_level
+7,Background/Biogenic A,#95D840FF,1
+5,Background/Biogenic B,#55C667FF,2
+2,Background/Biogenic C,#29AF7FFF,3
+6,Background/Biogenic D,#1F968BFF,4
+1,Background/Biogenic E,#287D8EFF,5
+9,Background/Biogenic F,#33638DFF,6
+8,Background/Biogenic G,#404788FF,7
+4,Biomass Burning A,orange,8
+10,Biomass Burning B,orange3,9
+3,Urban Plume A,grey50,10

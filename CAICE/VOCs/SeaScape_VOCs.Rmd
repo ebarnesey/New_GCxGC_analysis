@@ -43,6 +43,7 @@ library(lattice)
 library(survival)
 library(Hmisc)
 library(lubridate)
+
 #install.packages("installr")
 #library(installr)
 ```
@@ -162,6 +163,24 @@ M_t_analyte_unique_voc <- M_t_all_analytes_voc %>%
 
 
 ```
+
+Correlation table for Ryan ward
+```{r}
+
+M_t_analyte_unique_voc.wide <- M_t_analyte_unique_voc %>% 
+  dplyr::select(r_date, Compound.Name, volume_norm_rough) %>% 
+  spread(Compound.Name, volume_norm_rough) %>% 
+  dplyr::select(-r_date)
+
+voc_all.cor <- cor(M_t_analyte_unique_voc.wide, method = "pearson", use = "pairwise.complete.obs")
+
+write.csv(voc_all.cor, "All_voc_cor.2.csv")
+
+
+  
+
+```
+
 
 # quantification check
 # part 1: kath SMA figures
@@ -425,11 +444,12 @@ btz_fig.a.sv <- M_t_voc_quantcheck.sv %>%
   geom_point(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), shape = 16, size = 2.4)+
   geom_line(aes(x = r_date, y= vol_zscore, color = quant.proxy.f), size = 1.3)+
   scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
-  scale_color_manual(name = "Anthropogenic Compounds", labels = c("styrene", "naphthalene", "benzophenone"), values = c("darkorange2", "darkgoldenrod", "tomato3"))+
+  scale_color_manual(name = "Anthropogenic Compounds", values = c("darkorange2",
+                                                    "black", "tomato4"))+
   guides(shape=guide_legend(title="Source Group"))+
   xlab("")+
   ylab("Gas Concentration\n(Z-Scored)")+
-  theme_bw(base_size = 16)
+  theme_bw(base_size = 20)
 
 btz_fig.a.sv
 
@@ -448,7 +468,7 @@ btz_fig.b.sv <- M_t_voc_quantcheck.sv %>%
   guides(shape=guide_legend(title="Source Group"))+
   xlab("")+
   ylab("Gas Concentration\n(Z-Scored)")+
-  theme_bw(base_size = 16)+
+  theme_bw(base_size = 20)+
   theme(axis.text.x = element_blank())
 
 btz_fig.b.sv
@@ -459,7 +479,7 @@ btztseries2.sv <- ggarrange(chlor_hb_wt2, btz_fig.b.sv, btz_fig.a.sv, heights = 
 
 btztseries2.sv
 
-png("btz_tseries4.sv.png", width=11, height=10,
+png("btz_tseries6.btzpap.png", width=11, height=10,
     units="in", res=1000, pointsize=2)
 btztseries2.sv
 dev.off() 

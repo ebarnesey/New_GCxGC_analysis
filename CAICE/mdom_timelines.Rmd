@@ -382,6 +382,15 @@ unique_tracing_c %>%
 
 compiled_comp_info_mdom <- read_csv("Compiled_Compoundinfo_Blobtable_SS_mdom.csv")
 
+spearmans <- read_csv("Spearmans_subdata_forMike.csv")
+
+names(spearmans) <- make.names(names(spearmans),unique = TRUE) 
+
+spearmans_merge1 <- compiled_comp_info_mdom %>% 
+  inner_join(spearmans, by = c("Library.Formula_NISTmain" = "Formula"))
+
+write.csv(spearmans_merge1, "sper.csv")
+
 compiled_comp_info_mdom.findable <- compiled_comp_info_mdom %>% 
   filter(Library.Match.Factor_NISTmain> 800) %>% 
   mutate(Identifiable = TRUE) %>% 
@@ -1325,7 +1334,7 @@ pie_ssa <- ggplot(pie.labs.ssa)+
   blank_theme
 pie_ssa
   
-png("piessa1.png", width=11, height=7,
+png("piessa2.png", width=11, height=7,
     units="in", res=600, pointsize=12)
 pie_ssa
 dev.off()
@@ -1363,7 +1372,7 @@ pie_mdom <- ggplot(pie.labs.mdom)+
 
 pie_mdom
 
-png("piemdom1.png", width=11, height=7,
+png("piemdom2.png", width=11, height=7,
     units="in", res=1000, pointsize=6)
 pie_mdom
 dev.off()
@@ -1398,7 +1407,7 @@ btz.pie.b <- ggplot(pie.labs.both, aes(x = group, y = vol_frac, fill = id))+
   
 btz.pie.b
 
-png("pieboth10.png", width=10, height=5,
+png("pieboth12.png", width=10, height=5,
     units="in", res=1500, pointsize=2)
 btz.pie.b
 dev.off()
@@ -1408,13 +1417,17 @@ dev.off()
 now trying stick chart with solubilities
 
 ```{r}
+
+
 btz.stickchart <- btz_info.mdom %>% 
   left_join(btz_mean_conc) %>% 
   left_join(btz_mean_conc.mdom) %>% 
   arrange(My_Name) %>% 
   arrange(desc(water_sol_mg_L)) %>% 
   mutate(My_Name = factor(My_Name, My_Name)) %>% 
-  mutate(pcol = factor(Plot_color, Plot_color)) 
+  mutate(pcol2 = Plot_color) %>% 
+  mutate(pcol.f = as.factor(pcol2)) %>% 
+  mutate(water_cat.f = as.factor(water_sol_cat))
 
 btz.stickchart.2 <- btz.stickchart
 
@@ -1475,7 +1488,7 @@ stick <- btz.stickchart.2 %>%
 
 stick
 
-png("stick4.png", width=8, height=5.5,
+png("stick5.png", width=8, height=5.5,
     units="in", res=1500, pointsize=2)
 stick
 dev.off()
@@ -1488,7 +1501,114 @@ btz.stickchart %>%
 
 
 ```
+now trying bar chart
+```{r}
 
+btz_mean_con_both.l <- rbind(btz_mean_conc.mdom.l, btz_mean_conc.l)
+
+btz.water <- btz_info %>% 
+  dplyr::select(My_Name, water_sol_cat, water_sol_mg_L) %>% 
+  arrange(My_Name) %>% 
+  arrange(desc(water_sol_mg_L)) %>% 
+  mutate(id_sol = row_number()) %>% 
+  mutate(water_cat.f = factor(water_sol_cat, 
+                              levels = c("<10", "10-50", "50-100", "100-200", ">1000"))) %>% 
+  mutate(water_sol.f = factor(water_sol_mg_L))
+
+
+  
+
+btz.bar <- pie.labs.both %>% 
+  left_join(btz.water) %>% 
+  mutate(facet = factor(facet, levels = c("SSA", "DOM"))) %>% 
+  filter(!is.na(water_cat.f)) %>% 
+  arrange(id_sol)
+
+bar.labs.n <- btz.bar %>% 
+  dplyr::distinct(id_sol, .keep_all = TRUE) %>% 
+  dplyr::arrange(id_sol)  
+  
+ann_text1 <- data.frame(water_cat.f = factor("<10",
+                             levels = c("<10", "10-50", "50-100", "100-200", ">1000")), vol_frac = .4, lab = "n = 1   n = 2   n = 3   n = 4   n = 5",
+                       facet = factor("SSA",levels = c("SSA", "DOM")))
+
+ann_text2 <- data.frame(water_cat.f = factor("<10",
+                             levels = c("<10", "10-50", "50-100", "100-200", ">1000")), vol_frac = .4, lab = "n = 1   n = 2   n = 3   n = 4   n = 5",
+                       facet = factor("DOM",levels = c("SSA", "DOM")))
+# 
+# p + geom_text(data = ann_text,label = "Text")
+
+# dat_text <- data.frame(
+#   label = c("n = 1    n = 2", "n = 3   n = 4"),
+#   facet   = c("SSA", "DOM")
+# )
+# p + geom_text(
+#   data    = dat_text,
+#   mapping = aes(x = 1, y = .5, label = label),
+#   hjust   = -0.1,
+#   vjust   = -1
+# )
+
+
+btz.bar.1 <- btz.bar %>%
+  filter(!is.na(water_sol_cat)) %>% 
+  ggplot()+
+  geom_col(aes(x = water_cat.f, y = vol_frac, fill = as.factor(id_sol)))+
+  facet_grid(rows = vars(facet))+
+  scale_fill_manual(name = "", labels = bar.labs.n$My_Name, values = bar.labs.n$Plot_color)+
+  ylab("Fraction Benzothiazole Carbon Pool")+
+  xlab("Solubility in Water (mg/L)")+
+  geom_text(data = ann_text1, x = 3, y = .45, 
+            label = "n = 3           n = 6          n = 1          n = 1           n = 2")+
+  geom_text(data = ann_text2, x = 3, y = .45, 
+            label = "n = 1           n = 1          n = 1          n = 0           n = 3")+
+  #geom_text(aes(x = 1, y = .3, label = "n = 1"), vjust = 1.3)+
+  theme_bw(base_size = 16)+
+  #(ylim=c(0, .1))+
+  guides(fill = guide_legend(override.aes = list(size = 4) ) )
+  
+btz.bar.1
+
+btz.bar.3 <- btz.bar %>%
+  filter(!is.na(water_sol_cat)) %>% 
+  ggplot()+
+  geom_col(aes(x = water_cat.f, y = log(10000*vol_frac), fill = id), position = "dodge2")+
+  facet_grid(rows = vars(facet))+
+  scale_fill_manual(name = "", labels = pie.labs.both.n$My_Name, values = pie.labs.both.n$Plot_color)+
+  ylab("Log Percent Benzothiazole Carbon Pool")+
+  xlab("Solubility in Water (mg/L)")+
+  # geom_text(data = ann_text1, x = 3.5, y = .45, 
+  #           label = "n = 4        n = 6       n = 1       n = 1       n = 2        n = 1")+
+  # geom_text(data = ann_text2, x = 3.5, y = .45, 
+  #           label = "n = 2        n = 1       n = 1       n = 0       n = 3        n = 0")+
+  #geom_text(aes(x = 1, y = .3, label = "n = 1"), vjust = 1.3)+
+  theme_bw(base_size = 16)+
+  guides(fill = guide_legend(override.aes = list(size = 4) ) )
+
+btz.bar.3
+
+png("sol3.png", width=8.5, height=5,
+    units="in", res=1500, pointsize=2)
+btz.bar.1
+dev.off()
+
+
+
+
+btz.bar.2 <- btz.bar %>%
+  filter(!is.na(water_sol_cat)) %>% 
+  ggplot()+
+  geom_col(aes(x = water_cat.f, y = log(1000*vol_frac), fill = id))+
+  facet_grid(rows = vars(facet))+
+  scale_fill_manual(name = "", labels = pie.labs.both.n$My_Name, values = pie.labs.both.n$Plot_color)+
+  ylab("Fraction Benzothiazole Carbon Pool")+
+  xlab("Solubility in Water (mg/L)")+
+  theme_bw(base_size = 16)+
+  guides(fill = guide_legend(override.aes = list(size = 4) ) )
+
+btz.bar.2
+
+```
 
 
 

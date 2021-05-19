@@ -87,17 +87,24 @@ for(i in 1:(nrow(bt_sum_bloom3)-1)){
 
 chlor.mean <- mean(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
 chlor.sd <- sd(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
+chlor.max <- max(bt_sum_bloom3$Extracted_Chla, na.rm = TRUE)
 
 hb.mean <- mean(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
 hb.sd <- sd(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
+hb.max <- max(bt_sum_bloom3$Bulk_HB_updated, na.rm = TRUE)
 
 t.mean <- mean(bt_sum_bloom3$water_temp, na.rm = TRUE)
 t.sd <- sd(bt_sum_bloom3$water_temp, na.rm = TRUE)
+t.max <- max(bt_sum_bloom3$water_temp, na.rm = TRUE)
+
 
 bt_sum_bloom3 <- bt_sum_bloom3 %>% 
   mutate(chlor.z = (Extracted_Chla-chlor.mean)/chlor.sd) %>% 
   mutate(hb.z = (Bulk_HB_updated-hb.mean)/hb.sd) %>% 
-  mutate(temp.z = (water_temp-t.mean)/t.sd) 
+  mutate(temp.z = (water_temp-t.mean)/t.sd) %>% 
+  mutate(chlor.m = Extracted_Chla/chlor.max) %>% 
+  mutate(hb.m = Bulk_HB_updated/hb.max) %>% 
+  mutate(temp.m= water_temp/t.max)
   
 
 
@@ -1038,7 +1045,7 @@ plot(1:9, pch = 16, cex = 2, col = buda.lt)
 print(hawaii)
 print(buda)
 
-#library(colorspace)
+library(colorspace)
 
 imola.dk <- darken(imola, amount = .05)
 imola.lt <- lighten(imola, amount = .2)
@@ -1204,6 +1211,42 @@ panel.background = element_blank())
 
 chlor_hb_wt2
 
+chlor_hb_wt3 <- ggplot()+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Extracted_Chla),], aes(x = r_date, y = chlor.m, color = "Chlorophyll-a"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$Bulk_HB_updated),], aes(x = r_date, y = hb.m, color = "Heterotrophic Bacteria"), size = 1.5)+
+  geom_line(data = bt_sum_bloom3[!is.na(bt_sum_bloom3$water_temp),], aes(x = r_date, y = (water_temp-24)*.3, color = "Water Temperature"), size = 1.5)+
+  scale_y_continuous(
+    
+    # Features of the first axis
+    #name = "Aerosol Concentration \n(ng/m^3)",
+    name = "Water Conc.\n(Normalized to Max)",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~.*(10/3)+24, name="Water Temp (C)")
+  )+
+  # scale_y_continuous(
+  #   
+  #   # Features of the first axis
+  #   #name = "Aerosol Concentration \n(ng/m^3)",
+  #   name = "Concentration \n(Normalized to Max)",
+  #   
+  #   # Add a second axis and specify its features
+  #   sec.axis = sec_axis((~.-23)/4, name="Water Temperature (Celcius)")
+  # )+
+  
+  
+  scale_color_manual(values = c("green4", "blue", "grey50"))+
+  labs(color = "")+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  xlab("")+
+  #ylab("Concentration \nand Water Temp\n(Normalized to Max)")+
+  theme_bw(base_size = 16)+
+  theme(legend.title=element_blank(), axis.text.x = element_blank(), legend.margin=margin(c(.5,.5,.5,.5)), 
+panel.background = element_blank(), legend.position = "bottom")
+
+
+chlor_hb_wt3
+
 btz_mean_conc <- M_t_analyte_withIS.btz %>% 
   dplyr::select(My_Name, r_date, ng_per_cm3) %>% 
   spread(My_Name, ng_per_cm3, fill = 0) %>% 
@@ -1244,10 +1287,10 @@ pp_btz2 <- ggplot(M_t_analyte_withIS.btz) +
     
     # Features of the first axis
     #name = "Aerosol Concentration \n(ng/m^3)",
-    name = expression(Aerosol~Concentration~(ng/m^3)),
+    name = expression(Aerosol~Conc.~(ng/m^3)),
     
     # Add a second axis and specify its features
-    sec.axis = sec_axis(~./coeff2, name="Gas Phase (ppt)")
+    sec.axis = sec_axis(~./coeff2, name="Gas Phase Conc. (ppt)")
   )+
   scale_color_manual(values = c("black"))+
   scale_fill_manual(labels = btz_plot_labs$My_Name, values = btz_plot_labs$Plot_color)+
@@ -1258,6 +1301,7 @@ pp_btz2 <- ggplot(M_t_analyte_withIS.btz) +
   theme(legend.position = "bottom")+
   guides(fill=guide_legend(ncol=2))
 
+
 pp_btz2
 
 png("btz_trial3.png", width=11, height=7,
@@ -1265,20 +1309,22 @@ png("btz_trial3.png", width=11, height=7,
 pp_btz2
 dev.off()
 
-btztseries1 <- ggarrange(chlor_hb_wt, pp_btz2, heights = c(9, 16), 
+btztseries2 <- ggarrange(chlor_hb_wt3, pp_btz2, heights = c(9, 16), 
           labels = c("A", "B"),
           ncol = 1, nrow = 2, align = "v")
 
 
-png("btz_tseries5.png", width=9, height=10,
+png("btz_tseries8.png", width=9.5, height=9.5,
     units="in", res=1000, pointsize=2)
-btztseries1
+btztseries2
 dev.off() 
 
 btz_mean_voc <- mean(btz_voc$btz_ppt, na.rm = TRUE)
   
 
-
+btz_ssa_trace <- M_t_analyte_withIS.btz %>% 
+  filter(Compound.Name == "20200803_1535_blob_958_") %>% 
+  dplyr::select(r_date, ng_per_cm3)
 
 
 ```
@@ -1309,7 +1355,7 @@ pp_btz_each <- ggplot(M_t_analyte_withIS.btz.z) +
 pp_btz_each
 
 
-png("btz_tseries_indv3.png", width=6, height=9,
+png("btz_tseries_indv4.png", width=6, height=9,
     units="in", res=1000, pointsize=2)
 pp_btz_each
 dev.off() 

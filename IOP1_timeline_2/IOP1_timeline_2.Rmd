@@ -1791,14 +1791,26 @@ plot(1:n, pch = 16, cex = 2, col = cols)
 manual_split_IOP1 <- read_csv("IOP1_hclust_corr_inspection_12cluster_split.csv") %>% 
   dplyr::select(Compound.Name, assigned_cluster)
 
+cluster_name_iop1 <- read_csv("Cluster_names_IOP1.csv") %>% 
+  arrange(cluster_level)
+
 M_t_analyte_unique_IS.1.0filled.hclust <- M_t_analyte_unique_IS.1.0filled %>% 
   left_join(clustered_data_tidy1) %>% 
-  left_join(manual_split_IOP1)
+  left_join(manual_split_IOP1) %>% 
+  left_join(cluster_name_iop1)
+
+
+
+
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, 
-             fill = as.factor(assigned_cluster)))+
-  geom_col()
+             fill = as.factor(cluster_level)))+
+  geom_col()+
+  scale_fill_manual(name = "Clusters", values = cluster_name_iop1$cluster_col, 
+                    labels= cluster_name_iop1$cluster_name)+
+  ylab("Normalized Organic Signal")+
+  xlab("")
 
 M_t_analyte_unique_IS.1.0filled.hclust %>% 
   ggplot(aes(x = 1, y = vol_is_rawnorm_ptnorm, 
@@ -2424,14 +2436,24 @@ plot(1:n, pch = 16, cex = 2, col = cols)
 manual_split_IOP2 <- read_csv("IOP2_hclust_corr_inspection_10cluster_split.csv") %>% 
   dplyr::select(Compound.Name, assigned_cluster)
 
+cluster_name_iop2 <- read_csv("Cluster_names_IOP2.csv") %>% 
+  arrange(cluster_level)
+
+
+
 M_t_analyte_unique_IS.2.0filled.hclust <- M_t_analyte_unique_IS.2.0filled %>% 
   left_join(clustered_data_tidy2) %>% 
-  left_join(manual_split_IOP2)
+  left_join(manual_split_IOP2) %>% 
+  left_join(cluster_name_iop2)
 
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, 
-             fill = as.factor(assigned_cluster)))+
-  geom_col()
+             fill = as.factor(cluster_level)))+
+  geom_col()+
+  scale_fill_manual(name = "Clusters", values = cluster_name_iop2$cluster_col, 
+                    labels= cluster_name_iop2$cluster_name)+
+  ylab("Normalized Organic Signal")+
+  xlab("")
 
 M_t_analyte_unique_IS.2.0filled.hclust %>% 
   ggplot(aes(x = 1, y = vol_is_rawnorm_ptnorm, 
@@ -2786,6 +2808,9 @@ write.csv(Compiled_comp_info_withclust, "Compiled_Compound_info_clustered.csv")
 ```
 looking at the median and the mean of each season cluster
 ```{r}
+
+
+
 daysigsum_1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
   group_by(r_date) %>% 
   summarise(total_org_vol = sum(vol_is_rawnorm_ptnorm))
@@ -2834,6 +2859,77 @@ influence_type_frac_tseries_1 %>%
                                "Urban Plume Influenced", "Background Biogenic"))+
   ylab("Fractional Contribution\nto Organic Signal")+
   ggtitle("Wet Season")
+
+rsq <- function(x, y) summary(lm(y~x))$r.squared
+
+bb.1 <- influence_type_frac_tseries_1 %>% 
+  filter(influence_type_1== "BB") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+bb.1.rsq <- rsq(bb.1$total_org_vol, bb.1$sig_fraction)
+
+bio.1 <- influence_type_frac_tseries_1 %>% 
+  filter(influence_type_1== "x") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+bio.1.rsq <- rsq(bio.1$total_org_vol, bio.1$sig_fraction)
+
+up.1 <- influence_type_frac_tseries_1 %>% 
+  filter(influence_type_1== "UP") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+up.1.rsq <- rsq(up.1$total_org_vol, up.1$sig_fraction)
+
+bb.2 <- influence_type_frac_tseries_2 %>% 
+  filter(influence_type_2== "BB") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+bb.2.rsq <- rsq(bb.2$total_org_vol, bb.2$sig_fraction)
+
+bio.2 <- influence_type_frac_tseries_2 %>% 
+  filter(influence_type_2== "x") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+bio.2.rsq <- rsq(bio.2$total_org_vol, bio.2$sig_fraction)
+
+up.2 <- influence_type_frac_tseries_2 %>% 
+  filter(influence_type_2== "UP") %>% 
+  dplyr::select(total_org_vol, sig_fraction)
+
+up.2.rsq <- rsq(up.2$total_org_vol, up.2$sig_fraction)
+
+
+
+influence_type_frac_tseries_1 %>% 
+  ggplot(aes(x = total_org_vol, y = sig_fraction, color = influence_type_1))+
+  geom_point()+
+  geom_smooth(method=lm,   # Add linear regression lines
+                se=FALSE)+
+  scale_color_manual(name = "Source Group", 
+                     values = c("orange", "grey50", "green"), labels = c("Biomass Burning", "Urban Plume", "Background/Biogenic"))+
+  xlab("Total Organic Aerosol Signal")+
+  ylab("Fraction Organic Signal \nAttributable to Source Group")+
+  ylim(0, 1)+
+  ggtitle("Wet Season")
+
+influence_type_frac_tseries_2 %>% 
+  ggplot(aes(x = (total_org_vol), y = sig_fraction, color = influence_type_2))+
+  geom_point()+
+  geom_smooth(method=lm,   # Add linear regression lines
+                se=FALSE)+
+  scale_color_manual(name = "Source Group", 
+                     values = c("orange", "grey50", "green"), labels = c("Biomass Burning", "Urban Plume", "Background/Biogenic"))+
+  xlab("Total Organic Aerosol Signal")+
+  ylab("Fraction Organic Signal \nAttributable to Source Group")+
+  ylim(0, 1)+
+  ggtitle("Dry Season")
+
+influence_type_frac_tseries_2 %>% 
+  ggplot(aes(x = (total_org_vol), y = sig_fraction, color = influence_type_2))+
+  geom_point()+
+  geom_smooth(method=lm,   # Add linear regression lines
+                se=FALSE)+
+  xlim(0, 7.5)
   
 
 influence_type_stats_1 <- influence_type_frac_tseries_1 %>% 
@@ -2870,6 +2966,45 @@ influence_type_stats_2 %>%
 
 
 ```
+
+
+looking at urban monoterpene ox product 
+```{r}
+
+Urban_mt_1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
+  filter(Compound.Name == "1221_0832_blob_35") %>% 
+  left_join(anth_1)
+
+Urban_mt_1 %>% 
+  ggplot(aes(x = anthrovol, y = vol_is_rawnorm_ptnorm))+
+  geom_point()
+
+Urban_mt_1 %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "green")+
+  geom_line(aes(x = r_date, y = anthrovol), color = "black")
+
+urban_mt1.rsq = rsq(Urban_mt_1$anthrovol, Urban_mt_1$vol_is_rawnorm_ptnorm)
+
+Urban_mt_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
+  filter(Compound.Name == "1221_0832_blob_35") %>% 
+  left_join(anth_2)
+
+Urban_mt_2 %>% 
+  ggplot(aes(x = anthrovol, y = vol_is_rawnorm_ptnorm))+
+  geom_point()
+
+Urban_mt_2 %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
+  geom_line(color = "green")+
+  geom_line(aes(x = r_date, y = anthrovol), color = "black")
+
+urban_mt2.rsq = rsq(Urban_mt_2$anthrovol, Urban_mt_2$vol_is_rawnorm_ptnorm)
+
+cor(Urban_mt_2$anthrovol, Urban_mt_2$vol_is_rawnorm_ptnorm)
+
+```
+
 
 
 
