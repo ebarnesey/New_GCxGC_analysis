@@ -2971,37 +2971,82 @@ influence_type_stats_2 %>%
 looking at urban monoterpene ox product 
 ```{r}
 
+
+
+
 Urban_mt_1 <- M_t_analyte_unique_IS.1.0filled.hclust.o %>% 
   filter(Compound.Name == "1221_0832_blob_35") %>% 
-  left_join(anth_1)
+  left_join(anth_1) 
 
-Urban_mt_1 %>% 
-  ggplot(aes(x = anthrovol, y = vol_is_rawnorm_ptnorm))+
-  geom_point()
-
-Urban_mt_1 %>% 
-  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
-  geom_line(color = "green")+
-  geom_line(aes(x = r_date, y = anthrovol), color = "black")
-
-urban_mt1.rsq = rsq(Urban_mt_1$anthrovol, Urban_mt_1$vol_is_rawnorm_ptnorm)
-
-Urban_mt_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
-  filter(Compound.Name == "1221_0832_blob_35") %>% 
+Urban_mt_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>%
+  filter(Compound.Name == "1221_0832_blob_35") %>%
   left_join(anth_2)
 
+just_1dates <- bt_sum_iop1 %>% 
+  mutate(in_sample = 1) %>% 
+  mutate(r_date.f = as.factor(r_date)) %>% 
+  dplyr::select(r_date.f, in_sample)
+
+dates_leftout1 <- fulldates_iop1 %>% 
+  left_join(just_1dates, by = "r_date.f") %>% 
+  filter(is.na(in_sample)) %>% 
+  left_join(Urban_mt_1, by = "r_date") %>% 
+  dplyr::select(-r_date.f, -in_sample, -AMZ_date, -date_num)
+
+dates_leftout2 <- fulldates_iop2 %>% 
+  dplyr::select(r_date) %>% 
+  anti_join(bt_sum_iop2, by = "r_date") %>% 
+  left_join(Urban_mt_2) 
+
+Urban_mt_1 <- rbind(Urban_mt_1, dates_leftout1)
+
+Urban_mt_2 <- rbind(Urban_mt_2, dates_leftout2)
+
+
+
+Urban_mt_1 %>% 
+  ggplot(aes(x = anthrovol, y = vol_is_rawnorm_ptnorm))+
+  geom_point()
+
+Urban_mt_1 %>% 
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, color = "Novel Monoterpene\nOxidation Product"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = anthrovol, color = "Urban Plume Tracer"))+
+  scale_color_manual(name = "", values = c("green", "black"))+
+  xlab("")+
+  ylab("Normalized Organic Signal")+
+  theme_bw(base_size = 16)+
+  ggtitle("Wet Season")
+
+#urban_mt1.rsq = rsq(Urban_mt_1$anthrovol, Urban_mt_1$vol_is_rawnorm_ptnorm)
+cor(Urban_mt_1$anthrovol, Urban_mt_1$vol_is_rawnorm_ptnorm, method = "pearson",
+    use = "pairwise.complete.obs")
+
+
+
+# Urban_mt_2 <- M_t_analyte_unique_IS.2.0filled.hclust.o %>%
+#   filter(Compound.Name == "1202_0046_blob_647") %>%
+#   left_join(anth_2)
+
 Urban_mt_2 %>% 
   ggplot(aes(x = anthrovol, y = vol_is_rawnorm_ptnorm))+
   geom_point()
 
 Urban_mt_2 %>% 
-  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm))+
-  geom_line(color = "green")+
-  geom_line(aes(x = r_date, y = anthrovol), color = "black")
+  ggplot(aes(x = r_date, y = vol_is_rawnorm_ptnorm, 
+             color = "Novel Monoterpene\nOxidation Product"))+
+  geom_line()+
+  geom_line(aes(x = r_date, y = anthrovol, color = "Urban Plume Tracer"))+
+  scale_color_manual(name = "", values = c("green", "black"))+
+  xlab("")+
+  ylab("Normalized Organic Signal")+
+  theme_bw(base_size = 16)+
+  ggtitle("Dry Season")
 
 urban_mt2.rsq = rsq(Urban_mt_2$anthrovol, Urban_mt_2$vol_is_rawnorm_ptnorm)
 
-cor(Urban_mt_2$anthrovol, Urban_mt_2$vol_is_rawnorm_ptnorm)
+cor(Urban_mt_2$anthrovol, Urban_mt_2$vol_is_rawnorm_ptnorm, method = "pearson",
+    use = "pairwise.complete.obs")
 
 ```
 
@@ -3579,6 +3624,7 @@ table(clustered_data_tidy2_comp[,2:3])
 
 ```
 Question- does factor 3 IOP2 need to be split? looking at actual tseries
+
 ```{r}
 
 M_t_analyte_unique_IS.2.0filled.hclust.o %>% 
