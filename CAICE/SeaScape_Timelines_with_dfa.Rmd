@@ -1219,7 +1219,7 @@ chlor_hb_wt3 <- ggplot()+
     
     # Features of the first axis
     #name = "Aerosol Concentration \n(ng/m^3)",
-    name = "Water Conc.\n(Normalized to Max)",
+    name = "Conc. in Seawater\n(Normalized to Max)",
     
     # Add a second axis and specify its features
     sec.axis = sec_axis(~.*(10/3)+24, name="Water Temp (C)")
@@ -1314,7 +1314,7 @@ btztseries2 <- ggarrange(chlor_hb_wt3, pp_btz2, heights = c(9, 16),
           ncol = 1, nrow = 2, align = "v")
 
 
-png("btz_tseries8.png", width=9.5, height=9.5,
+png("btz_tseries9.png", width=9.5, height=9.5,
     units="in", res=1000, pointsize=2)
 btztseries2
 dev.off() 
@@ -1325,6 +1325,48 @@ btz_mean_voc <- mean(btz_voc$btz_ppt, na.rm = TRUE)
 btz_ssa_trace <- M_t_analyte_withIS.btz %>% 
   filter(Compound.Name == "20200803_1535_blob_958_") %>% 
   dplyr::select(r_date, ng_per_cm3)
+
+
+
+pp_btz3 <- ggplot(M_t_analyte_withIS.btz) +
+  
+  geom_col(aes(x = r_date, y=(ng_per_cm3*1e6), fill = id), position = "fill") + 
+  # geom_point(data = btz_voc, aes(x = Date_time, y=(btz_ppt)*coeff2, color = "Benzothiazole - VOC"), size = 3) + # Divide by 10 to get the same range than the temperature
+  # #theme(legend.position = "bottom")+
+  # xlab("")+
+  # scale_y_continuous(
+  #   
+  #   # Features of the first axis
+  #   #name = "Aerosol Concentration \n(ng/m^3)",
+  #   name = expression(Aerosol~Conc.~(ng/m^3)),
+  #   
+  #   # Add a second axis and specify its features
+  #   sec.axis = sec_axis(~./coeff2, name="Gas Phase Conc. (ppt)")
+  # )+
+  #scale_color_manual(values = c("black"))+
+  scale_fill_manual(labels = btz_plot_labs$My_Name, values = btz_plot_labs$Plot_color)+
+  ylab("Fraction Benzothiazole \nCarbon Pool")+
+  xlab("")+
+  labs(color = "", fill = "")+
+  scale_x_datetime(date_breaks = "3 days", labels = date_format("%b %d"), limits = c(time_min_plot, time_max_plot))+
+  #guides(fill=guide_legend(ncol=3))+
+  theme_bw(base_size = 18)+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(ncol=2))
+
+pp_btz3
+
+btztseries3 <- ggarrange(chlor_hb_wt3, pp_btz3, heights = c(9, 16), 
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2, align = "v")
+
+
+png("btz_tseriesstacked1.png", width=9.5, height=9.5,
+    units="in", res=1000, pointsize=2)
+btztseries3
+dev.off() 
+  
+pp_btz2
 
 
 ```
@@ -1437,7 +1479,7 @@ Adding fields to cumsum to reflect total org norm and IS normnorm so that factor
 
 SeaScape_normalized_cumsum <- M_t_analyte_withIS %>% 
   group_by(Compound.Name) %>% 
-  summarise(totorgnorm_cumsum = sum(vol_is_normnorm_ptnorm_totorgnorm), isnormnormptnorm_cumsum = sum(vol_is_normnorm_ptnorm))
+  dplyr::summarise(totorgnorm_cumsum = sum(vol_is_normnorm_ptnorm_totorgnorm), isnormnormptnorm_cumsum = sum(vol_is_normnorm_ptnorm))
 
 tot_norm_vol = sum(SeaScape_normalized_cumsum$isnormnormptnorm_cumsum, na.rm = TRUE)
 
@@ -1961,6 +2003,67 @@ t.test(x, y, alternative = c("greater"), var.equal = TRUE)
 
 
 ```
+
+For Crocker- isotope correlations
+
+```{r}
+boxplot(SeaScape_normalized_cumsum$isnormnormptnorm_cumsum)
+summary(SeaScape_normalized_cumsum$isnormnormptnorm_cumsum)
+
+
+just_date_isot <- bt_sum_bloom3 %>% 
+  dplyr::select(r_date, Sub_iso_z) %>% 
+  mutate(Sub_iso_z = -1*Sub_iso_z)
+
+
+
+just_over_20000 <- M_t_analyte_withIS %>% 
+  left_join(SeaScape_normalized_cumsum, by = "Compound.Name") %>% 
+  filter(isnormnormptnorm_cumsum > 20000) %>% 
+  dplyr::select(Compound.Name, r_date, vol_is_rawnorm_ptnorm) %>% 
+  spread(Compound.Name, vol_is_rawnorm_ptnorm, fill = 0) %>% 
+  left_join(just_date_isot) %>% 
+  dplyr::select(-r_date)
+
+
+
+cov_isot <- data.frame(cor(just_over_20000, use ="pairwise.complete.obs"))
+
+write.csv(cov_isot, "Isotope_look.csv")
+
+M_t_analyte_withIS_isot <- M_t_analyte_withIS %>% 
+  dplyr::filter(Compound.Name == "20200803_1535_blob_521_oil" 
+         | Compound.Name == "20200803_1535_blob_21_"| Compound.Name =="20200803_1535_blob_598_oil"|Compound.Name == "20200803_0949_blob_18_")
+
+M_t_analyte_withIS_isot %>% 
+  filter(Compound.Name == "20200803_1535_blob_521_oil") %>% 
+  ggplot(aes(x = r_date, y = vol_is_normnorm_ptnorm_totorgnorm, color = Compound.Name))+
+  geom_point()+
+  geom_point(data = bt_sum_bloom3, aes(x = r_date, y = Sub_iso_z * .002), color = "black")
+
+M_t_analyte_withIS_isot %>% 
+  filter(Compound.Name == "20200803_1535_blob_521_oil") %>% 
+  ggplot(aes(x = Sub_iso_z, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()
+  
+M_t_analyte_withIS_isot %>% 
+  filter(Compound.Name == "20200803_1535_blob_21_") %>% 
+  ggplot(aes(x = Sub_iso_z, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()
+  
+M_t_analyte_withIS_isot %>% 
+  filter(Compound.Name == "20200803_1535_blob_598_oil") %>% 
+  ggplot(aes(x = Sub_iso_z, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()
+
+M_t_analyte_withIS_isot %>% 
+  filter(Compound.Name == "20200803_0949_blob_18_") %>% 
+  ggplot(aes(x = Sub_iso_z, y = vol_is_rawnorm_ptnorm, color = Compound.Name))+
+  geom_point()
+  
+
+```
+
 
 Looking at how the biogenic and anthropogenic decreasing compounds compare to total volume
 ```{r}

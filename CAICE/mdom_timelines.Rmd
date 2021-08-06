@@ -1023,7 +1023,10 @@ blank_theme <- theme_minimal()+
   axis.ticks = element_blank(),
   axis.text = element_blank(),
   legend.text = element_text(size = 16),
-  plot.title=element_text(size=14, face="bold")
+  plot.title=element_text(size=14, face="bold"),
+  #legend.spacing.y = unit(2.0, 'cm')+
+  legend.key = element_rect(size = 5, color = "white"),
+    legend.key.size = unit(.7, "cm")
   )
 
 
@@ -1042,7 +1045,7 @@ cutoff <- 15
 for(i in 1:nrow(kath.plots.pie)){
   
   if(kath.plots.pie$pct_change[i]>cutoff){
-    kath.plots.pie$cat.pie[i] <- "Introduced or \nSignificantly Enhanced"
+    kath.plots.pie$cat.pie[i] <- "Significantly Enhanced\nor Introduced"
   }
   
 }
@@ -1075,20 +1078,42 @@ png("kjmpie1.png", width=10, height=6,
 kjm.pie
 dev.off()
 
-kjm.pie2 <- pkk %>% 
+library(ggrepel)
+
+pos.pie<- data.frame(pos = c(.47, .03, .9, .4))
+
+pkk1 <- cbind(pkk, pos.pie)
+
+kjm.pie2 <- pkk1 %>% 
   ggplot(aes(x = "", y = sum_pct, fill = cat.pie))+
   geom_col(position = "fill")+
   facet_wrap(plot.l~., strip.position = "top")+
-  geom_text(aes(label = paste(round(sum_pct * 100, 0), "%")),
-            position = position_stack(vjust = 0.5), size = 6) +
+  # geom_text(aes(label = paste(round(sum_pct * 100, 0), "%")),
+  #           position = position_stack(vjust = 0.5), size = 6) +
   coord_polar("y")+
-  scale_fill_manual(name = "", values = c(colorBlindBlack8[6], colorBlindBlack8[8]))+
+  geom_label_repel(aes(y = pos, label = paste(round(sum_pct * 100, 0), "%")),
+                    size = 4.5, nudge_x = 1, show.legend = FALSE)+
+  scale_fill_manual(name = "", values = c(colorBlindBlack8[8], colorBlindBlack8[6]))+
+  # guides(fill=guide_legend(
+  #                keywidth=0.4,
+  #                keyheight=0.2,
+  #                default.unit="inch"))+
   blank_theme
+  
 kjm.pie2
 
 png("kjmpie5.png", width=10, height=6,
     units="in", res=1000, pointsize=13)
 kjm.pie2
+dev.off()
+
+figs_forkath <- ggarrange(kjm.pie2, kjm, heights = c(6, 6), 
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2, align = "v")
+
+png("kjmboth1.png", width=10, height=12,
+    units="in", res=1000, pointsize=13)
+figs_forkath
 dev.off()
 
 ```
@@ -1587,8 +1612,8 @@ btz.bar.3 <- btz.bar %>%
 
 btz.bar.3
 
-png("sol3.png", width=8.5, height=5,
-    units="in", res=1500, pointsize=2)
+png("sol4.png", width=8.5, height=5,
+    units="in", res=2500, pointsize=1)
 btz.bar.1
 dev.off()
 
