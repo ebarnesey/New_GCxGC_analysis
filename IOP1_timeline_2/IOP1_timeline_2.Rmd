@@ -525,9 +525,12 @@ IS_unique <- IS_goodmatch %>%
   summarise(Volume_tot = sum(Volume))
 
 IS_positions <- IS_goodmatch %>% 
-  group_by(Compound.Name, File_num) %>% 
+  filter(Compound.Name != "glucose-13C6") %>% 
+  filter(Compound.Name != "dC14") %>% 
+  dplyr::group_by(Compound.Name, File_num) %>% 
   #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec. - rt2_floor))
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = min(abs(Retention.II..sec. - rt2_floor)))
+
 
 IS_avg_vols_toadd <- IS_unique %>% 
   group_by(Compound.Name) %>% 

@@ -15,13 +15,17 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r libs, echo=FALSE}
 library(Rcpp)
+#install.packages("caret")
 library(caret) # cross validation
 
+#install.packages("randomForest")
 library(randomForest)
+#install.packages("gbm")
 library(gbm)
 
 
 library(nnet)
+#install.packages("ROCR")
 library(ROCR)
 
 library(caTools)
@@ -51,11 +55,31 @@ library(openxlsx)
 library(janitor)
 
 library(rpart) # CART
+#install.packages("rpart.plot")
 library(rpart.plot) # CART plotting
 
 #install.packages("CHNOSZ")
 library(CHNOSZ)
 ```
+Self-made functions for later use
+```{r}
+left_joinF <- function(x, y, fill = FALSE){
+  z <- left_join(x, y)
+  tmp <- setdiff(names(z), names(x))
+  z <- replace_na(z, setNames(as.list(rep(fill, length(tmp))), tmp))
+  z
+}
+
+left_join0<- function(x, y, fill = 0){
+  z <- left_join(x, y)
+  tmp <- setdiff(names(z), names(x))
+  z <- replace_na(z, setNames(as.list(rep(fill, length(tmp))), tmp))
+  z
+}
+
+
+```
+
 
 ## Parsing Out Mass Spectra
 
@@ -86,6 +110,9 @@ ES_table_full = ES_table_3 %>%
   mutate(my_ranks = order(order(intensity, decreasing=TRUE))) %>% 
   ungroup()
 
+ES_names <- ES_table_o %>% 
+  dplyr::select("Name")
+
 ES_table_trimmed = ES_table_full %>% 
   filter(my_ranks < 11)
 
@@ -99,15 +126,29 @@ mz_tab <- mz_tab %>%
 
 ES_table_ranked <- ES_table_trimmed %>% 
   left_join(mz_tab) %>% 
-  filter(freq_ranks< 21)
+  filter(freq_ranks< 41)
 
-ES_common_mz = ES_table_ranked %>%
-  dplyr::select(Name, mz) %>% 
+ES_common_mz.t = ES_table_ranked %>%
+  dplyr::select(Name, mz, intensity) %>% 
   mutate(mz = paste("mz_", mz, sep = "_")) %>% 
-  mutate(mz_obs = TRUE) 
+  mutate(mz_obs = TRUE) %>% 
+  mutate(mz_intensity = intensity)
 
 wide_mz = ES_common_mz %>% 
-  spread(mz, mz_obs, fill = FALSE)
+  dplyr::select(Name, mz, mz_obs) %>% 
+  spread(mz, mz_obs, fill = FALSE) 
+
+wide_mz <- ES_names %>% 
+  left_joinF(wide_mz)
+
+
+
+wide_mz_i = ES_common_mz %>% 
+  dplyr::select(Name, mz, mz_intensity) %>% 
+  spread(mz, mz_intensity, fill = 0) 
+  
+wide_mz_i <- ES_names %>% 
+  left_join0(wide_mz_i)
   
 
 
@@ -142,7 +183,8 @@ losses = losses %>%
 
 
 
-for(i in 1:1350) {
+for(i in 1:nrow(losses)) {
+  #i = 1
   
   name_t = names_losses[i]
   loss_num_t = losses$loss_num[i]
@@ -156,29 +198,47 @@ for(i in 1:1350) {
   upper_mz = df_t$mz[upper_index]
   lower_mz = df_t$mz[lower_index]
   
+
   losses$losses_vec[i] = abs(upper_mz - lower_mz)
   
 }
 
-loss_tab <- as.data.frame(table(losses$losses_vec))
-loss_tab <- loss_tab %>% 
-  arrange(desc(Freq)) %>% 
-  mutate(freq_ranks = order(order(Freq, decreasing = TRUE))) %>% 
-  mutate(Var1 = as.character(Var1)) %>% 
-  mutate(Var1 = as.numeric(Var1))
+arranged_mz <- ES_table_trimmed %>% 
+  arrange(desc(mz)) %>% 
+  arrange(desc(Name)) %>% 
+  mutate(loss_fast = 0)
 
-losses = losses %>% 
-  left_join(loss_tab, by = c("losses_vec"= "Var1"))
+for(i in 2:nrow(arranged_mz)){
+  arranged_mz$loss_fast[i]= arranged_mz$mz[i-1]-arranged_mz$mz[i]
+}
+
+arranged_mz.t <- as.data.frame(table(arranged_mz$loss_fast)) %>% 
+  mutate(num_loss = as.character(Var1)) %>% 
+  mutate(num_loss = as.numeric(num_loss)) %>% 
+  filter(num_loss > 0) %>% 
+  arrange(desc(Freq)) %>% 
+  mutate(id = row_number())
+
+# loss_tab <- as.data.frame(table(losses$losses_vec))
+# loss_tab <- loss_tab %>% 
+#   arrange(desc(Freq)) %>% 
+#   mutate(freq_ranks = order(order(Freq, decreasing = TRUE))) %>% 
+#   mutate(Var1 = as.character(Var1)) %>% 
+#   mutate(Var1 = as.numeric(Var1))
+# 
+losses = losses %>%
+  left_join(arranged_mz.t, by = c("losses_vec"= "num_loss"))
 
 losses_trimmed = losses %>% 
-  filter(freq_ranks<21)
+  filter(id<21) 
 
 
-ES_common_losses = losses_trimmed %>% 
-  dplyr::select(names_losses, losses_vec) %>% 
-  mutate(Loss_obs = TRUE) 
+# ES_common_losses = losses_trimmed %>% 
+#   dplyr::select(names_losses, losses_vec) %>% 
+#   distinct() %>% 
+#   mutate(Loss_obs = TRUE) 
  
-wide_losses = reshape(ES_common_losses, idvar = "names_losses", timevar = "losses_vec", direction = "wide")
+# wide_losses = reshape(ES_common_losses, idvar = "names_losses", timevar = "losses_vec", direction = "wide")
 
 ES_common_losses = losses_trimmed %>%
   dplyr::select(names_losses, losses_vec) %>% 
@@ -187,37 +247,102 @@ ES_common_losses = losses_trimmed %>%
   distinct()
 
 wide_losses = ES_common_losses %>% 
-  spread(losses_vec, Loss_obs, fill = FALSE)
+  spread(losses_vec, Loss_obs, fill = FALSE) %>% 
+  right_join(ES_names, by = c("names_losses"= "Name"))
 
-
+wide_losses[is.na(wide_losses)] <- FALSE
 ```
 
 ## Category Assignment: Future Steps
 
 In the following section, the compounds are classified by functional group and random forest modeling is utilized to predict the category based on mass spectrum.  The accuracy of this approach is poor, likely because many compounds have multiple functional groups aparent in their mass spectra so assigning a compound to only one functional group class may be an inappropriate approach.  Future investigations will attempt to predict on a true/false basis whether a given compound (meaning its mass spectrum) is indicative of a particular functional group rather than approaching as a classification problem.
 ```{r}
-cat <- read_csv("Categories_ES.csv")
+cat <- read_csv("Categories_ES_updated.csv")
 
 Cat_full <- cat %>% 
   left_join(wide_losses, by = c("Name" = "names_losses")) %>% 
-  left_join(wide_mz) %>% 
-  mutate(Func_group_cat = as.factor(Func_group_cat)) 
+  #left_join(wide_losses) %>% 
+  left_join(wide_mz_i, fill = 0) %>% 
+  mutate(Func_group_cat = as.factor(Func_group_cat)) %>% 
+  mutate(Func_Group_Cat_3 = as.factor(Func_Group_Cat_3)) %>% 
+  mutate(RI.round = round(d_alkane_RTI, digits = -2)) %>% 
+  mutate(RI.round.f = as.factor(RI.round)) %>% 
+  filter(!is.na(mz__73))
 
-Cat_full[is.na(Cat_full)] <- FALSE
+LRI_factor <- Cat_full %>% 
+  dplyr::select(Name, RI.round.f) %>% 
+  rename(cpnd = Name)
 
-set.seed(100)
-split = sample.split(Cat_full$Func_group_cat, SplitRatio = 0.75)
+#Cat_full[is.na(Cat_full)] <- FALSE
+#note- with set.seed of 56, we get a 10% performance improvement
+set.seed(56)
+split = sample.split(Cat_full$Func_Group_Cat_3, SplitRatio = 0.8)
 
 # what is a split?
-Cat.train <- filter(Cat_full, split == TRUE) # is split a variable in loans?
+Cat.train <- filter(Cat_full, split == TRUE)  # is split a variable in loans?
+  
+  
 Cat.test <- filter(Cat_full, split == FALSE)
+
+table(Cat.train$Func_Group_Cat_3)
+table(Cat.test$Func_Group_Cat_3)
+
+boxplot(Cat.train$d_alkane_RTI, Cat.test$d_alkane_RTI)
+boxplot(Cat.train$RT2, Cat.test$RT2)
+boxplot(Cat.train$O_C_ratio, Cat.test$O_C_ratio)
+
+seed <- 1:200
+dalk_pctdif <- 1:200
+rt2_pctdif <- 1:200
+O_c_pctdif <- as.numeric(rep(NA, 200))
+
+Seed <- data.frame(seed, dalk_pctdif, rt2_pctdif, O_c_pctdif)
+
+for(i in 1:nrow(Seed)){
+  #i = 1
+  set.seed(Seed$seed[i])
+  split.t = sample.split(Cat_full$Func_Group_Cat_3, SplitRatio = 0.8)
+
+# what is a split?.t
+  Cat.train.t <- filter(Cat_full, split.t == TRUE)  # is split a variable in loans?
+  
+  
+  Cat.test.t <- filter(Cat_full, split.t == FALSE)
+  
+  Seed$dalk_pctdif[i]= abs(mean(Cat.train.t$d_alkane_RTI, na.rm = TRUE)-
+                             mean(Cat.test.t$d_alkane_RTI, na.rm = TRUE))/
+                      mean(Cat.train.t$d_alkane_RTI, na.rm = TRUE)
+  
+  Seed$rt2_pctdif[i]= abs(mean(Cat.train.t$RT2, na.rm = TRUE)-
+                             mean(Cat.test.t$RT2, na.rm = TRUE))/
+                      mean(Cat.train.t$RT2, na.rm = TRUE)
+  
+  Seed$O_c_pctdif[i]= abs(mean(Cat.train.t$O_C_ratio, na.rm = TRUE)-
+                             mean(Cat.test.t$O_C_ratio, na.rm = TRUE))/
+                      mean(Cat.train.t$O_C_ratio, na.rm = TRUE)
+  
+  
+}
+
+Seed <- Seed %>% 
+  mutate(mult.diff = O_c_pctdif*dalk_pctdif*rt2_pctdif) %>% 
+  mutate(sum.diff = O_c_pctdif+dalk_pctdif+rt2_pctdif)
+
+# based on htese results, a seed of 56 or 66 are the most representative
+
 ```
 
 
 ```{r, eval = FALSE}
 
+Cat.train.funcgroup <- Cat.train %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "O_C_ratio", "Haofei_cat", "Cstar_Cat"))
+
+Cat.test.funcgroup <- Cat.test %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "O_C_ratio", "Haofei_cat", "Cstar_Cat"))
+
 set.seed(144)
-train.rf = train(Func_group_cat~., data = Cat.train, method = "rf", tuneGrid = data.frame(mtry=seq(1, 25, 1)), trControl = trainControl(method = "cv", number = 5), metric = "Accuracy")
+train.rf = train(Func_Group_Cat_3~., data = Cat.train.funcgroup, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "Accuracy", na.action = na.exclude)
 
 best.rf = train.rf$finalModel
 best.rf
@@ -226,16 +351,161 @@ rf.plot <- ggplot(train.rf$results, aes(x=mtry, y=Accuracy)) + geom_line(lwd=2) 
   ylab("Accuracy of Predictions")
 rf.plot
 
-Cat.mm = as.data.frame(model.matrix(Func_group_cat ~., data = Cat.test))
+Cat.mm = as.data.frame(model.matrix(Func_Group_Cat_3 ~., data = Cat.test.funcgroup))
 
 set.seed(144)
 pred.best.rf = predict(best.rf, newdata = Cat.mm, type = "class")
 
-t_rf_all = table(Cat.test$Func_group_cat, pred.best.rf)
+t_rf_all = table(Cat.test.funcgroup$Func_Group_Cat_3, pred.best.rf)
 t_rf_all
 
-accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test)
+accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test.funcgroup)
 accuracy.rf 
+```
+Now trying for accuracy in O:C 
+
+```{r}
+
+Cat.train.oc <- Cat.train %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+
+Cat.test.oc <- Cat.test %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+
+set.seed(144)
+train.rf = train(O_C_ratio ~., data = Cat.train.oc, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "RMSE", na.action = na.exclude)
+
+best.rf = train.rf$finalModel
+best.rf
+
+rf.plot <- ggplot(train.rf$results, aes(x=mtry, y=Rsquared)) + geom_line(lwd=2) +
+  ylab("Accuracy of Predictions")
+rf.plot
+
+Cat.mm = as.data.frame(model.matrix(O_C_ratio ~., data = Cat.test.oc))
+
+set.seed(144)
+pred.best.rf = predict(best.rf, newdata = Cat.mm, type = "class")
+
+t_rf_all = table(Cat.test.oc$O_C_ratio, pred.best.rf)
+t_rf_all
+
+accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test.oc)
+accuracy.rf 
+
+Cat.test.oc$O_C_ratio.p <- pred.best.rf
+
+Cat.test.oc.2 <- Cat.test.oc %>% 
+  mutate(pct_error_oc = 100*(abs(O_C_ratio.p-O_C_ratio)/O_C_ratio))
+summary(Cat.test.oc$pct_error_oc)
+
+Cat.test.oc.2$Name <- Cat.test$Name
+
+OSR2(pred.best.rf, Cat.train.oc$O_C_ratio, Cat.test.oc$O_C_ratio)
+
+Cat.test.oc %>% 
+  ggplot(aes(x = O_C_ratio, y = O_C_ratio.p))+
+  geom_point()+
+  xlab("O:C")+
+  ylab("O:C Predicted")
+
+
+
+```
+# now trying Cstar
+
+```{r}
+library(data.table)
+test <- "C8H10O2"
+
+t <- t(data.frame(makeup(test)))
+
+Element <- c("C", "H", "O", "N", "S")
+d.e <- data.frame(Element = Element)
+
+
+Cat.train.form <- Cat.train %>% 
+  mutate(Cnum = 0) %>% 
+  mutate(Hnum = 0) %>% 
+  mutate(Onum = 0) %>% 
+  mutate(Nnum = 0) %>% 
+  mutate(Snum = 0)
+
+for(i in 1:nrow(Cat.train.form){
+  
+  i = 10
+  form.t <- Cat.train.form$ChemFormula[i]
+  
+  form.t1 <- data.frame(makeup(form.t))
+  setDT(form.t1, keep.row(names = TRUE)[]
+  names(form.t1)<- c("Element", "num")
+  
+  form.t2 <- d.e %>% 
+    left_join0(form.t1)
+    
+  form.t3 <- data.frame(form.t2[,-1])
+  rownames(form.t3) <- form.t2[,1]
+  
+  form.t4 <- t(form.t3)
+  names(form.t4) <-c("C", "H", "O", "N", "S")
+  
+  Cat.train.form$Cnum[i]= form.t4$C[1]
+  Cat.train.form$Hnum[i]= form.t4$H[1]
+  Cat.train.form$Onum[i]= form.t4$O[1]
+  Cat.train.form$Nnum[i]= form.t4$N[1]
+  Cat.train.form$Snum[i]= form.t4$S[1]
+}
+
+
+Cstar_params <- read_csv("C_star_params.csv")
+Cat.train.cs <- Cat.train %>% 
+  left_join(Cstar_params) %>% 
+  mutate(cstar = )
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+
+Cat.test.cs <- Cat.test %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+
+set.seed(144)
+train.rf = train(O_C_ratio ~., data = Cat.train.oc, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "RMSE", na.action = na.exclude)
+
+best.rf = train.rf$finalModel
+best.rf
+
+rf.plot <- ggplot(train.rf$results, aes(x=mtry, y=Rsquared)) + geom_line(lwd=2) +
+  ylab("Accuracy of Predictions")
+rf.plot
+
+Cat.mm = as.data.frame(model.matrix(O_C_ratio ~., data = Cat.test.oc))
+
+set.seed(144)
+pred.best.rf = predict(best.rf, newdata = Cat.mm, type = "class")
+
+t_rf_all = table(Cat.test.oc$O_C_ratio, pred.best.rf)
+t_rf_all
+
+accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test.oc)
+accuracy.rf 
+
+Cat.test.oc$O_C_ratio.p <- pred.best.rf
+
+Cat.test.oc.2 <- Cat.test.oc %>% 
+  mutate(pct_error_oc = 100*(abs(O_C_ratio.p-O_C_ratio)/O_C_ratio))
+summary(Cat.test.oc$pct_error_oc)
+
+Cat.test.oc.2$Name <- Cat.test$Name
+
+OSR2(pred.best.rf, Cat.train.oc$O_C_ratio, Cat.test.oc$O_C_ratio)
+
+Cat.test.oc %>% 
+  ggplot(aes(x = O_C_ratio, y = O_C_ratio.p))+
+  geom_point()+
+  xlab("O:C")+
+  ylab("O:C Predicted")
+
+CHONS()
+
+
 ```
 
 
@@ -362,7 +632,17 @@ M_t_LRI <- M_t_full %>% mutate(LRI_diff = abs(Library.RI-LRI.I))
 IS_goodmatch <- M_t_LRI %>% 
   filter(Library.Name == IS_lib_name) %>% 
   filter(LRI_diff < LRI_diff_floor-5) %>% 
-  filter(Library.Match.Factor > Match_factor_floor)  
+  filter(Library.Match.Factor > Match_factor_floor) 
+
+IS_check <- M_t_LRI %>% 
+  filter(Library.Name == IS_lib_name) %>% 
+  group_by(Compound.Name, File_num) %>% 
+  summarise(Volume_tot = sum(Volume))
+
+table(IS_check$Compound.Name)
+
+# note that we need to go in and fix the cal points for the times when nothing is getting detected
+  
 
 FB_goodmatch <- M_t_LRI %>% 
   filter(Library.Name == FB_lib_name) %>% 
@@ -462,7 +742,7 @@ compound_pop <- M_t_analyte_unique %>%
 table(compound_pop$comp.n)
 
 hist(compound_pop$pct_of_samp, 
-     main = paste("Histogram of", nrow(compound_pop), "Traced Compounds\nOver 5 Day Test Period"),
+     main = paste("Histogram of", nrow(compound_pop), "Traced Compounds\nOver External Standards"),
      xlab = "Percent Occurence Above Detection Limits",
      col = "grey")
 
@@ -494,27 +774,377 @@ IS_unique <- IS_goodmatch %>%
   group_by(Compound.Name, File_num) %>% 
   summarise(Volume_tot = sum(Volume))
 
+
+fixing <- data.frame(table(IS_unique$Compound.Name)) %>% 
+  dplyr::mutate(Compound.Name = Var1)
+
+# note this indicates that all of the IS compounds are there- good
+
 IS_positions <- IS_goodmatch %>% 
-  group_by(Compound.Name, File_num) %>% 
-  summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+  filter(Compound.Name != "glucose-13C6") %>% 
+  filter(Compound.Name != "dC14") %>% 
+  filter(Compound.Name != "methoxyphenol-d3") %>% 
+  dplyr::group_by(Compound.Name, File_num) %>% 
+  #summarise(LRI_avg = mean(LRI.I), RI2 = min(Retention.II..sec.-rt2_floor))
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = min(abs(Retention.II..sec. - rt2_floor)))
+
+
+IS_avg_vols_toadd <- IS_unique %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  dplyr::left_join(IS_unique) %>% 
+  mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
+  mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
+  dplyr::select(Compound.Name, File_num, IS_mean_norm)
 
 IS_unique_pos <- IS_unique %>% 
-  left_join(IS_positions)
+  left_join(IS_positions) %>% 
+  left_join(IS_avg_vols_toadd)
+
+
 
 IS_test1 <- IS_unique_pos %>% 
-  filter(File_num == "GCxGC_20181201_0136")
+  filter(File_num == "GCxGC_20181201_1254")
 
 IS_1_vol <- IS_test1$Volume_tot
 RI1 <- IS_test1$LRI_avg
 RI2 <- IS_test1$RI2
 
+write.csv(IS_positions, "IS_positions_ESmod.csv")
+
 # IS_1_pos <- IS_test1 %>% 
 #   ungroup() %>% 
 #   dplyr::select("LRI_avg", "RI2")
+
+IS_positions_avg <- IS_positions %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(LRI_avg_all = mean(LRI_avg, na.rm = TRUE), RI2_all = mean(RI2, na.rm = TRUE)) 
+
+
+write.csv(IS_positions_avg, "IS_positions_avg_ESmod.csv")
+
+IS_avg_vols <- IS_unique %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(IS_avgvol = mean(Volume_tot), IS_medvol = median(Volume_tot)) %>% 
+  left_join(IS_unique) %>% 
+  mutate(IS_mean_norm = Volume_tot / IS_avgvol) %>%
+  mutate(IS_med_norm = Volume_tot / IS_medvol) %>% 
+  left_join(bt_sum_bloom3)
 ```
+
+# Normalizing cal points by the average of the nearest 3 internal standard compounds (self normalized)
+
+```{r IS_mapping2}
+LRI_weight = 10 
+LRII_weight = 1
+
+LRI1_avg = mean(IS_positions_avg$LRI_avg_all, na.rm = TRUE)
+LRI2_avg = mean(IS_positions_avg$RI2_all)
+
+IS_positions_avg <- IS_positions_avg %>% 
+  mutate(relative_LRI = (LRI_avg_all/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (RI2_all/LRI2_avg)*LRII_weight)
+
+write.csv(IS_positions_avg, "IS_positions_avg_rel_ESmod.csv")
+
+Analyte_positions_trial <- M_t_analyte_unique %>% 
+  dplyr::group_by(Compound.Name, File_num) %>% 
+  dplyr::summarise(LRI_avg = mean(LRI.I), RI2 = median(Retention.II..sec. - rt2_floor))
+
+# note filtering out three small blobs outside of RI window
+
+Analyte_positions <- M_t_analyte_unique %>% 
+  filter(!is.na(LRI.I)) %>% 
+  dplyr::group_by(Compound.Name) %>% 
+  dplyr::summarise(LRI_avg = mean(LRI.I, na.rm = TRUE), RI2 = median(Retention.II..sec. - rt2_floor))
+
+Analyte_positions <- Analyte_positions %>% 
+  mutate(relative_LRI = (LRI_avg/LRI1_avg)*LRI_weight) %>% 
+  mutate(relative_LRI2 = (RI2/LRI2_avg)*LRII_weight)
+
+# checking to make sure that the ranges match up, eg back end checking that same norm method used on moth IS and analyte positions
+summary(IS_positions_avg$relative_LRI)
+summary(Analyte_positions$relative_LRI)
+summary(IS_positions_avg$relative_LRI2)
+summary(Analyte_positions$relative_LRI2)
+
+Analyte_pos_short <- Analyte_positions %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+IS_pos_short <- IS_positions_avg %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+#knn(IS_pos_short, Analyte_pos_short, cl=IS_pos_short$Compound.Name, k=1, l=0)
+
+#Old method, only using 1 nearest
+#testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "standard", k=1)
+library(RANN)
+# note 1.19 is the min radius at which every compound has at least one nearest
+testnn <- nn2(IS_pos_short, query = Analyte_pos_short, treetype = "kd", searchtype = "radius", k=3, radius = 3.9)
+
+
+Analyte_IS_Index <- data.frame(testnn$nn.idx)
+# old method only using 1 nearest
+# Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
+Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index1 = Analyte_IS_Index$X1, IS_index2 = Analyte_IS_Index$X2, IS_index3 = Analyte_IS_Index$X3)
+
+# old method with only 1 IS
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
+
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
+#   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
+#   mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
+
+Analyte_with_IS <- Analyte_pos_ad %>% 
+  mutate(IS_appropriate1 = NA) %>% 
+  mutate(IS_appropriate2 = NA) %>% 
+  mutate(IS_appropriate3 = NA)
+
+for(i in 1:nrow(Analyte_with_IS)){
+  t_isind_1 <- Analyte_with_IS$IS_index1[i]
+  t_isind_2 <- Analyte_with_IS$IS_index2[i]
+  t_isind_3 <- Analyte_with_IS$IS_index3[i]
+  
+  if(t_isind_1 > 0){
+  t_isap_1 <- IS_positions_avg$Compound.Name[t_isind_1]
+  }else{
+    t_isap_1 <- NA
+  }
+  
+  if(t_isind_2 > 0){
+  t_isap_2 <- IS_positions_avg$Compound.Name[t_isind_2]
+  }else{
+    t_isap_2 <- NA
+  }
+  
+  if(t_isind_3 > 0){
+  t_isap_3 <- IS_positions_avg$Compound.Name[t_isind_3]
+  }else{
+    t_isap_3 <- NA
+  }
+  
+  
+  
+  Analyte_with_IS$IS_appropriate1[i] <- t_isap_1
+  Analyte_with_IS$IS_appropriate2[i] <- t_isap_2
+  Analyte_with_IS$IS_appropriate3[i] <- t_isap_3
+  
+}
+
+# Analyte_with_IS_positions <- Analyte_with_IS %>% 
+#   left_join(Analyte_positions) %>% 
+#   left_join(IS_positions_avg, by = c("IS_appropriate"= "Compound.Name"))
+
+Analyte_with_IS_positions <- Analyte_with_IS %>% 
+  left_join(Analyte_positions) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate1"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate2"= "Compound.Name")) %>% 
+  left_join(IS_positions_avg, by = c("IS_appropriate3"= "Compound.Name"))
+
+M_t_analyte_withIS <- M_t_analyte_unique %>% 
+  left_join(Analyte_with_IS) %>% 
+  mutate(IS_vol1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm1= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm2= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm3= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_vol_dalk= -999*(LRI.I/LRI.I)) %>% 
+  mutate(IS_mean_norm_dalk= -999*(LRI.I/LRI.I))
+
+# old- only 1 IS
+# M_t_analyte_withIS <- M_t_analyte_unique %>% 
+#   left_join(Analyte_with_IS) %>% 
+#   mutate(IS_vol= -999*(LRI.I/LRI.I)) %>% 
+#   mutate(IS_mean_norm= -999*(LRI.I/LRI.I)) 
+
+
+# for(i in 1:nrow(M_t_analyte_withIS)){
+#   
+#   
+#   IS_name = M_t_analyte_withIS$IS_appropriate[i]
+#   File_num_t = M_t_analyte_withIS$File_num[i]
+#   
+#   IS_indicated <- IS_stability %>% 
+#     filter(Compound.Name == IS_name) %>% 
+#     filter(File_num == File_num_t)
+#   
+#   M_t_analyte_withIS$IS_vol[i] <-IS_indicated$Volume_tot[1]
+#   M_t_analyte_withIS$IS_mean_norm[i] <-IS_indicated$IS_mean_norm[1]
+#   
+#   
+# }
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  
+  
+  IS_name1 = M_t_analyte_withIS$IS_appropriate1[i]
+  IS_name2 = M_t_analyte_withIS$IS_appropriate2[i]
+  IS_name3 = M_t_analyte_withIS$IS_appropriate3[i]
+  
+  
+  
+  
+  File_num_t = M_t_analyte_withIS$File_num[i]
+  
+  
+  
+  IS_indicated1 <- IS_avg_vols %>% 
+    filter(Compound.Name == IS_name1) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol1[i] <-IS_indicated1$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm1[i] <-IS_indicated1$IS_mean_norm[1]
+  
+  IS_indicated2 <- IS_avg_vols %>% 
+    filter(Compound.Name == IS_name2) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol2[i] <-IS_indicated2$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm2[i] <-IS_indicated2$IS_mean_norm[1]
+  
+  IS_indicated3 <- IS_avg_vols %>% 
+    filter(Compound.Name == IS_name3) %>% 
+    filter(File_num == File_num_t)
+  
+  M_t_analyte_withIS$IS_vol3[i] <-IS_indicated3$Volume_tot[1]
+  M_t_analyte_withIS$IS_mean_norm3[i] <-IS_indicated3$IS_mean_norm[1]
+  
+}
+
+# 
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+#   mutate(vol_is_rawnorm = Volume/IS_vol)
+#   
+
+# note- this step is not working
+# M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+#   mutate(IS_vol = mean(c(IS_vol1, IS_vol2, IS_vol3), na.rm = TRUE)) %>% 
+#   mutate(IS_mean_norm = mean(c(IS_mean_norm1, IS_mean_norm2, IS_mean_norm3), na.rm = TRUE))
+
+for(i in 1:nrow(M_t_analyte_withIS)){
+  
+  isvols_raw <- c(M_t_analyte_withIS$IS_vol1[i], M_t_analyte_withIS$IS_vol2[i], M_t_analyte_withIS$IS_vol3[i])
+  
+  M_t_analyte_withIS$IS_vol[i] = mean(isvols_raw, na.rm = TRUE)
+  
+  isvols_norm <- c(M_t_analyte_withIS$IS_mean_norm1[i], M_t_analyte_withIS$IS_mean_norm2[i], M_t_analyte_withIS$IS_mean_norm3[i])
+  
+  M_t_analyte_withIS$IS_mean_norm[i] = mean(isvols_norm, na.rm = TRUE)
+  
+}
+
+
+M_t_analyte_withIS <- M_t_analyte_withIS %>% 
+  mutate(vol_is_normnorm = Volume/IS_mean_norm) %>% 
+  mutate(vol_is_rawnorm = Volume/IS_vol) #%>%
+  #mutate(vol_is_normnorm_ptnorm = vol_is_normnorm/(Punch_num_s) %>% 
+  #mutate(vol_is_rawnorm_ptnorm = vol_is_rawnorm/(Punch_num_sample_time_norm))
+
+
+IS_problems <- M_t_analyte_withIS %>% 
+  filter(is.na(vol_is_normnorm))
+```
+
+
+
 There are a variety of options for normalizing by internal standard volume, and these different options will be explored in greater depth in future.  The option utilized in this test is the creation of a generalized additive model which uses the recovery of each internal standard in each of the images to create a model of how compound recovery is affected by the sample in which each compound is measured, the position in terms of retention index (a proxy for volatility), and the position in terms of RI2 (a proxy for polarity).  The advantage of this method is that it more easily allows analyte compounds which fall outside of the bounds of the positions of the internal standards to be normalized, and it diminishes the impact of one incorrect assignment of an internal standard species in a single image, as modeled recoveries will be informed by the typical recovery of each compound rather than being informed only by the range of recoveries within a single sample. Below I test a few options for modeling internal standard recovery using a GAM.
 
-```{r warning = FALSE}
+
+I also need to identify the nearest ES.train compound for each ES.test compound for my proxy quantification- doing that here
+
+```{r}
+Cat.test.names <- Cat.test %>% 
+  mutate(Compound.Name = Name) %>% 
+  dplyr::select(Compound.Name) %>% 
+  mutate(is.test = TRUE)
+
+Cat.train.names <- Cat.train %>% 
+  mutate(Compound.Name = Name) %>% 
+  dplyr::select(Compound.Name) %>% 
+  mutate(is.train = TRUE) 
+  
+
+Cat.train.pos <- Analyte_positions %>% 
+  left_join(Cat.train.names) %>% 
+  filter(is.train == TRUE)
+
+Cat.test.pos <- Analyte_positions %>% 
+  left_join(Cat.test.names) %>% 
+  filter(is.test == TRUE)
+
+Cat.train.pos.s <- Cat.train.pos %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+Cat.test.pos.s <- Cat.test.pos %>% 
+  dplyr::select(relative_LRI, relative_LRI2)
+
+
+
+library(RANN)
+testnn2 <- nn2(Cat.train.pos.s, query = Cat.test.pos.s, treetype = "kd", searchtype = "radius", k=3, radius = 3.9)
+
+
+test_train_Index <- data.frame(testnn2$nn.idx)
+# old method only using 1 nearest
+# Analyte_pos_ad <- data.frame(Compound.Name = Analyte_positions$Compound.Name, IS_index = Analyte_IS_Index)
+
+test_pos_ad <- data.frame(Compound.Name = Cat.test.pos$Compound.Name, train_index1 = test_train_Index$X1, train_index2 = test_train_Index$X2, train_index3 = test_train_Index$X3)
+
+# old method with only 1 IS
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate = IS_positions_avg$Compound.Name[IS_index])
+
+# Analyte_with_IS <- Analyte_pos_ad %>% 
+#   mutate(IS_appropriate1 = IS_positions_avg$Compound.Name[IS_index1]) %>% 
+#   mutate(IS_appropriate2 = IS_positions_avg$Compound.Name[IS_index2]) %>% 
+#   mutate(IS_appropriate3 = IS_positions_avg$Compound.Name[IS_index3])
+
+test_with_train <- test_pos_ad %>% 
+  mutate(train_appropriate1 = NA) %>% 
+  mutate(train_appropriate2 = NA) %>% 
+  mutate(train_appropriate3 = NA)
+
+for(i in 1:nrow(test_with_train)){
+  t_isind_1 <- test_with_train$train_index1[i]
+  t_isind_2 <- test_with_train$train_index2[i]
+  t_isind_3 <- test_with_train$train_index3[i]
+  
+  if(t_isind_1 > 0){
+  t_isap_1 <- Cat.train.pos$Compound.Name[t_isind_1]
+  }else{
+    t_isap_1 <- NA
+  }
+  
+  if(t_isind_2 > 0){
+  t_isap_2 <- Cat.train.pos$Compound.Name[t_isind_2]
+  }else{
+    t_isap_2 <- NA
+  }
+  
+  if(t_isind_3 > 0){
+  t_isap_3 <- Cat.train.pos$Compound.Name[t_isind_3]
+  }else{
+    t_isap_3 <- NA
+  }
+  
+  
+  
+  test_with_train$train_appropriate1[i] <- t_isap_1
+  test_with_train$train_appropriate2[i] <- t_isap_2
+  test_with_train$train_appropriate3[i] <- t_isap_3
+  
+}
+
+```
+
+
+```{r warning = FALSE, eval = FALSE}
 # trying IS by GAM
 library(gam)
 library(mgcv)
@@ -615,7 +1245,8 @@ test_gam_all %>%
 
 
 ```
-```{r}
+
+```{r, eval = FALSE}
 ## add a column to the master list of unique analytes which is the internal standard normalized volume at each point in time
 M_t_analyte_unique_IS <- M_t_analyte_unique %>% 
   mutate(IS_glm =  exp(predict.gam(IS_gam2b, data.frame(Fac = as.factor(File_num), x = LRI.I, z = Retention.II..sec.)))) %>% 
@@ -623,19 +1254,17 @@ M_t_analyte_unique_IS <- M_t_analyte_unique %>%
 ```
 Note- moving forward, before doing the correction between ES and sample, must train a GAM on everything- both the sample and the ES (cant do just one)
 
-
-## Trying the internal standard nearest normalized by the average of that IS
 ```{r}
-IS_positions_avg <- read.csv("IS_positions_avg.csv")
-
+M_t_analyte_unique_IS <- M_t_analyte_withIS
 ```
+
 
 
 ## Loading External Standard
 
 Next the External standard calibration point information must be added into the processed blob files and reformatted for future modeling. Additionally, cal curves must be plotted to identify problematic points. 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 cal_pts <- read_csv("Cal_Curve_points_ES.csv")
 
 # tidying column names
@@ -658,10 +1287,11 @@ for(i in 1:nrow(cal_pts)){
   bid_temp <- cal_pts$Compound.Name[i]
 
   n_c_full_sub <- n_c_full %>% 
-    filter(Compound.Name == bid_temp)
+    filter(Compound.Name == bid_temp) %>% 
+    dplyr::select(Compound.Name, r_rundate, Cal_amt_ng, vol_is_normnorm)
 
   p <- n_c_full_sub %>% 
-    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
     geom_point()
   
   print(p)
@@ -676,7 +1306,7 @@ bid_tempj <- cal_pts$Compound.Name[j]
     filter(Compound.Name == bid_tempj)
 
   pp <- n_c_full_subj %>% 
-    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
     geom_point()+
     xlab("Calibration Amount (ng)")+
     ylab("Instrument Volume Response")
@@ -749,13 +1379,15 @@ for(i in 1:nrow(cal_pts)){
     filter(Compound.Name == bid_temp)
 
   p <- n_c_full_sub %>% 
-    ggplot(aes(x = Cal_amt_ng, y = Vol_norm_GLM, color = as.factor(r_rundate), size = Compound.Name))+
+    ggplot(aes(x = Cal_amt_ng, y = vol_is_normnorm, color = as.factor(r_rundate), size = Compound.Name))+
     geom_point()
   
-  #print(p)
+  print(p)
 }
  
-  
+prob <- ES_cleaned1 %>% 
+  filter(is.na(vol_is_normnorm)) %>% 
+  dplyr::select(Compound.Name, Run_date, vol_is_normnorm, Volume, IS_mean_norm, IS_vol1)
   
   
 
@@ -790,7 +1422,7 @@ ES_for_quant <- ES_withcat %>%
                    Library.Reverse.Match.Factor, Library.Probability, Review.Status, Internal.Standard, Retention.I..min., 
                    Peak.Value, Volume, Quantifier.1., Quantifier.2., Quantifier.Response.1., Quantifier.Response.2., Volume.Ratio, File_num, 
                    Category, Filter_num, Filter_punches, IOP, AMZ_date, T_O_D, Date_num, Internal_load, Cal_Point_number, Run_date,
-                   Cal_Point, LRI_diff, unique.analyte, comp.n, pct_of_samp, IS_glm, Func_group_cat, Library.Name))
+                   Cal_Point, LRI_diff, unique.analyte, comp.n, pct_of_samp, Func_group_cat, Library.Name))
 
 # split into training and test
 #train.ids = sample(nrow(ES_for_quant), .7*nrow(ES_for_quant))
@@ -1089,20 +1721,24 @@ cal_curves$slope <- rep(-999, nrow(cal_curves))
 cal_curves$r2 <- rep(-999, nrow(cal_curves))
 
 for(i in 1:nrow(cal_curves)){
+  #print(i)
   
-  
+  #i = 140
   compound = cal_curves$cpnd[i]
   day = cal_curves$dates[i]
   
   subset <- ES_cleaned1 %>% 
     filter(Compound.Name == compound) %>% 
-    filter(r_rundate == day)
+    filter(r_rundate == day) %>% 
+    filter(!is.na(vol_is_normnorm))
   
   if(nrow(subset)<3){
     next
   }
   
-  lm_temp <- lm(Cal_amt_ng ~ 0 + Vol_norm_GLM, data = subset)
+  
+  
+  lm_temp <- lm(Cal_amt_ng ~ 0 + vol_is_normnorm, data = subset)
   
   #summary(lm_temp)
   
@@ -1121,7 +1757,7 @@ for(i in 1:nrow(cal_curves)){
 }
 
 real_cc <- cal_curves %>% 
-  filter(r2 > 0)
+  filter(r2 > .6)
 
 hist(real_cc$r2)
 
@@ -1141,13 +1777,14 @@ real_cc_withRI %>% ggplot(aes(x = cpnd, y = slope))+
 
 average_slopes <- real_cc_withRI %>% 
   group_by(cpnd) %>% 
-  summarise(avg_slope = mean(slope))
+  summarise(avg_slope = mean(slope)) %>% 
+  mutate(inverse_slope = 1/avg_slope)
 
 average_slopes <- average_slopes %>% 
   left_join(cat, by= c("cpnd"= "Name"))
 
 average_slopes %>% 
-  ggplot(aes(x = Retention_index, y = log(avg_slope), color = Func_group_cat))+
+  ggplot(aes(x = Retention_index, y = inverse_slope, color = Func_group_cat))+
   geom_point()
   
 
@@ -1157,7 +1794,8 @@ average_slopes %>%
 
 ```{r}
 
-n <- makeup("C10H16O2")
+n <- t(data.frame(makeup("C10H16O2")))
+
 
 ```
 
@@ -1165,27 +1803,450 @@ n <- makeup("C10H16O2")
 
 ```{r}
 # joining on the important ms info
-left_joinF <- function(x, y, fill = FALSE){
-  z <- left_join(x, y)
-  tmp <- setdiff(names(z), names(x))
-  z <- replace_na(z, setNames(as.list(rep(fill, length(tmp))), tmp))
-  z
-}
 
-colnames(wide_mz)[1] <- "cpnd"
+
+colnames(wide_mz_i)[1] <- "cpnd"
 colnames(wide_losses)[1] <- "cpnd"
 
 names_positions <- cal_pts %>% 
   dplyr::select(c("Compound.Name", "Library.RI", "Retention.II..sec."))
 
 cc_slopemod <- real_cc %>% 
-  left_joinF(wide_losses) %>% 
-  left_joinF(wide_mz) %>% 
+  left_join(wide_losses) %>% 
+  left_join(wide_mz_i) %>% 
   left_join(names_positions, by = c("cpnd"= "Compound.Name"))
 
 
 
+problem_spectra <-  cc_slopemod %>% 
+  filter(is.na(mz__73))
+  
+
+
+
 ```
+
+thing3
+Now Splitting ES into training and test sets maintaining the category ratios- using the optimized caterogy split from above
+
+```{r}
+
+cc_slopemod.test <- cc_slopemod %>% 
+  left_join(Cat.test.names, by = c("cpnd"= "Compound.Name")) %>% 
+  filter(is.test == TRUE) %>% 
+  dplyr::select(-is.test) %>% 
+  mutate(dates = as.factor(dates))
+
+cc_slopemod.train <- cc_slopemod %>% 
+  left_join(Cat.train.names, by = c("cpnd"= "Compound.Name")) %>% 
+  filter(is.train == TRUE) %>% 
+  dplyr::select(-is.train)%>% 
+  mutate(dates = as.factor(dates))
+
+cc_slopemod.test.withproxy <- cc_slopemod.test %>% 
+  left_join(test_with_train, by = c("cpnd"= "Compound.Name")) %>% 
+  mutate(slope_fromclosest = NA)
+
+for(i in 1:nrow(cc_slopemod.test.withproxy)){
+  
+  
+  date.t <- cc_slopemod.test.withproxy$dates[i]
+  proxy.n <- cc_slopemod.test.withproxy$train_appropriate1[i]
+  
+  es.t <- cc_slopemod.train %>% 
+    filter(cpnd == proxy.n) %>% 
+    filter(dates == date.t)
+  
+  cc_slopemod.test.withproxy$slope_fromclosest[i] <- es.t$slope[1]
+  
+}
+
+cc_slopemod.test.withproxy <- cc_slopemod.test.withproxy %>% 
+  mutate(slope_pcterr_fromclosest = 100*abs(slope - slope_fromclosest)/slope) %>% 
+  mutate(slope_ptcerr_fromclosest.i = 100*abs((1/slope) - (1/slope_fromclosest))/(1/slope))
+
+
+boxplot(cc_slopemod.test.withproxy$slope_pcterr_fromclosest)
+summary(cc_slopemod.test.withproxy$slope_pcterr_fromclosest)
+summary(cc_slopemod.test.withproxy$slope_ptcerr_fromclosest.i)
+
+
+
+
+
+
+```
+
+# now trying random forest mod
+
+```{r}
+
+slopemod.train <- cc_slopemod.train %>% 
+  #mutate(RTI_round = round(Library.RI, digits = -2)) %>% 
+  #mutate(RTI_round.f = as.factor(RTI_round)) %>% 
+  mutate(RTI.transform= NA) %>% 
+  mutate(slope.i = 1/slope) %>% 
+  left_join(LRI_factor)
+
+slopemod.test <- cc_slopemod.test %>% 
+  #mutate(RTI_round = round(Library.RI, digits = -2)) %>% 
+  #mutate(RTI_round.f = as.factor(RTI_round)) %>% 
+  #dplyr::select(-c("cpnd", "r2", "Library.RI", "RTI_round.f"))
+  mutate(RTI.transform= NA)%>% 
+  mutate(slope.i = 1/slope) %>% 
+  left_join(LRI_factor)
+  
+
+for(i in 1:nrow(slopemod.train)){
+  lri = slopemod.train$Library.RI[i]
+  if(lri<1927){
+    slopemod.train$RTI.transform[i] = (0.024*exp(0.0062*lri))^(1)
+  }else{
+    slopemod.train$RTI.transform[i] = (17915*exp(-0.00082*lri))^(1)
+  }
+}
+
+for(i in 1:nrow(slopemod.test)){
+  lri = slopemod.test$Library.RI[i]
+  if(lri<1927){
+    slopemod.test$RTI.transform[i] = (0.024*exp(0.0062*lri))^(1)
+  }else{
+    slopemod.test$RTI.transform[i] = (17915*exp(-0.00082*lri))^(1)
+  }
+}
+
+slopemod.test <- slopemod.test %>% 
+  dplyr::select(-c("slope", "cpnd", "r2", "RTI.transform", "Library.RI"))
+
+slopemod.train <- slopemod.train %>% 
+  dplyr::select(-c("slope", "cpnd", "r2", "RTI.transform", "Library.RI"))
+  
+
+
+
+set.seed(111)
+train.rf <- train(slope.i ~ .,
+                  data = slopemod.train,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry=3:40),
+                  trControl = trainControl(method="cv", number=5, verboseIter = TRUE),
+                  metric = "RMSE")
+# RMSE or Rsquared doesn't matter actually -- both will be generated for regression problems
+train.rf$results
+train.rf
+best.rf <- train.rf$finalModel
+best.rf
+```
+
+```{r}
+set.seed(110)
+rf.slopemod <- randomForest(slope.i ~ ., data = slopemod.train, mtry = 18, nodesize = 5, ntree = 5000)
+pred.best.rf.s <- predict(rf.slopemod, newdata = slopemod.test) # can use same model matrix
+pred.best.rf.s.train <- predict(rf.slopemod, newdata = slopemod.train)
+```
+
+
+```{r}
+rf_slope_test_comparison <- data.frame(pred.best.rf.s, slopemod.test$slope.i, cc_slopemod.test$cpnd, cc_slopemod.test$dates)
+rf_slope_train_comparison <- data.frame(pred.best.rf.s.train, slopemod.train$slope.i, cc_slopemod.train$cpnd, cc_slopemod.train$dates)
+
+rf_traincomp <- rf_slope_train_comparison %>% 
+  mutate(pcterror = 100*abs(pred.best.rf.s.train-slopemod.train.slope.i)/slopemod.train.slope.i)
+
+boxplot(rf_traincomp$pcterror)
+
+
+rf_traincomp %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 200)+
+  ylab("Percent Error")+
+  coord_cartesian(ylim=c(0, 500))+
+  labs(title = "Random Forest Training Set Error")
+
+mean(rf_traincomp$pcterror)
+median(rf_traincomp$pcterror)
+summary(rf_traincomp$pcterror)
+
+histogram(rf_traincomp$pcterror)
+
+rf_traincomp %>% ggplot(aes(x = slopemod.train.slope.i, y = log(pcterror)))+
+  geom_point()
+
+rf_testcomp <- rf_slope_test_comparison %>% 
+  mutate(pcterror = 100*abs(pred.best.rf.s-slopemod.test.slope.i)/slopemod.test.slope.i)
+
+rf_testcomp %>% ggplot(aes(y = pcterror))+
+  geom_boxplot()+
+  #ylim(0, 400)+
+  coord_cartesian(ylim=c(0, 500))+
+  ylab("Percent Error")+ 
+  labs(title = "Random Forest Test Set Error")
+
+boxplot(log(rf_traincomp$pcterror))
+
+mean(rf_testcomp$pcterror)
+median(rf_testcomp$pcterror)
+summary(rf_testcomp$pcterror)
+
+SSE = sum((slopemod.test$slope.i - pred.best.rf.s)^2)
+SST = sum((slopemod.test$slope.i - mean(slopemod.train$slope.i))^2)
+OSR2_rf_s = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf_s
+
+mae_rf.s <- MAE(pred = pred.best.rf.s, obs = slopemod.test$slope.i)
+
+
+```
+
+Checking performance in a narrower vol window
+```{r}
+proxy_quant_nearest_test_name <- cc_slopemod.test.withproxy %>% 
+  mutate(slope.i.p = 1/slope) %>% 
+  mutate(slope_fromclosest.i.p = 1/slope_fromclosest) %>% 
+  mutate(slope_pcterr_fromclosest.i.p = 100*abs(slope.i.p-slope_fromclosest.i.p)/slope.i.p) %>% 
+  dplyr::select(cpnd, dates, slope.i.p, slope_fromclosest.i.p, slope_pcterr_fromclosest.i.p) %>% 
+  rename(Name = cpnd)
+  
+
+
+rf_testcomp_full <- rf_testcomp %>% 
+  rename(Name = cc_slopemod.test.cpnd) %>% 
+  rename(dates = cc_slopemod.test.dates) %>% 
+  left_join(ES_table_o) %>% 
+  left_join(proxy_quant_nearest_test_name)
+
+rf_traincomp_full <- rf_traincomp %>% 
+  rename(Name = cc_slopemod.train.cpnd) %>% 
+  rename(dates = cc_slopemod.train.dates) %>% 
+  left_join(ES_table_o)
+
+rf_testcomp_full.lim <- rf_testcomp_full %>% 
+  filter(Retention_index > 1500) %>% 
+  filter(Retention_index < 3000)
+
+summary(rf_testcomp_full$pcterror)
+summary(rf_testcomp_full$slope_pcterr_fromclosest.i.p)
+summary(rf_testcomp_full.lim$pcterror)
+summary(rf_testcomp_full.lim$slope_pcterr_fromclosest.i.p)
+
+
+SSE = sum((rf_testcomp_full.lim$slope.i - rf_testcomp_full.lim$pred.best.rf.s)^2)
+SST = sum((rf_testcomp_full.lim$slope.i - mean(rf_testcomp_full.lim$slope.i))^2)
+OSR2_rf_s2 = 1 - SSE/SST # is this model useful at all? 
+OSR2_rf_s2
+
+
+
+```
+# Comparing which method is better on a compound by compound basis
+
+```{r}
+rf_pcterr_comparison <- rf_testcomp_full.lim %>% 
+  mutate(pct_error_comparison = pcterror - slope_pcterr_fromclosest.i.p) %>% 
+  mutate(slope_pcterr_fromclosest.i.p.signed = 100*(slope_fromclosest.i.p-slope.i.p)/slope.i.p) %>% 
+  mutate(pcterror.signed = 100*(pred.best.rf.s-slope.i.p)/slope.i.p)
+
+summary(rf_pcterr_comparison$slope_pcterr_fromclosest.i.p.signed)
+summary(rf_pcterr_comparison$pcterror.signed)
+
+rf_pcterr_comparison %>% 
+  ggplot()+
+  geom_histogram(aes(x = slope_pcterr_fromclosest.i.p.signed), fill = "black")+
+  geom_histogram(aes(x = pcterror.signed), fill = "blue")
+  
+
+boxplot(rf_pcterr_comparison$pct_error_comparison)
+
+summary(rf_pcterr_comparison$pct_error_comparison)
+
+rf_pcterr_comparison %>% 
+  ggplot(aes(x = pct_error_comparison))+
+  geom_histogram()
+
+
+```
+
+Trying clustering from external
+```{r}
+slope_clustering <- read_csv("Slope_clustering_stuff.csv")
+slope_clust.short <- slope_clustering %>% 
+  group_by(cpnd) %>% 
+  summarise(inverse_slope_risub.avg = mean(inverse_slope_risub)) %>% 
+  dplyr::select(cpnd, inverse_slope_risub.avg) 
+
+
+#install.packages("factoextra")
+library(factoextra)
+slope_clust.short = column_to_rownames(slope_clust.short, var = "cpnd")
+
+set.seed(123)
+km.res <- kmeans(slope_clust.short, 4, nstart = 25)
+print(km.res)
+
+fviz_nbclust(slope_clust.short, kmeans, method = "wss")
+
+fviz_nbclust(slope_clust.short, kmeans, method = "silhouette")
+fviz_nbclust(slope_clust.short, kmeans, method = "gap_stat")
+
+```
+now trying clustering based on slope and location on 2 dimensions
+```{r}
+slope_clust.short.2a <- slope_clustering %>% 
+  group_by(cpnd) %>% 
+  summarise(inverse_slope.avg = mean(inverse_slope), 
+            RI = mean(d_alkane_RTI), RII = mean(RT2)) 
+
+sd.slope = sd(slope_clust.short.2a$inverse_slope.avg)
+sd.RI = sd(slope_clust.short.2a$RI)
+sd.RII = sd(slope_clust.short.2a$RII)
+
+slope_clust.short.2 <- slope_clust.short.2a %>% 
+  mutate(inverse_slope.avg.scaled = 
+           10*inverse_slope.avg/sd.slope) %>% 
+  mutate(RI.scaled = 
+           RI/sd.RI) %>% 
+  mutate(RII.scaled = 
+           RII/sd.RII) %>% 
+  dplyr::select(cpnd, inverse_slope.avg.scaled, RI.scaled, RII.scaled)
+
+
+#install.packages("factoextra")
+#library(factoextra)
+slope_clust.short.2t = column_to_rownames(slope_clust.short.2, var = "cpnd")
+
+#slope_clust.short.2 <- scale(slope_clust.short.2)
+
+#slope_clust.short.2 <- slope_clust.short.2 
+
+set.seed(123)
+km.res <- kmeans(slope_clust.short.2t, 4, nstart = 25)
+print(km.res)
+
+fviz_nbclust(slope_clust.short.2t, kmeans, method = "wss")
+
+fviz_nbclust(slope_clust.short.2t, kmeans, method = "silhouette")
+fviz_nbclust(slope_clust.short.2t, kmeans, method = "gap_stat")
+
+
+km.res <- kmeans(slope_clust.short.2t, 4, nstart = 25)
+
+fviz_cluster(km.res, data = slope_clust.short.2t)
+
+slope_clust.short.2t %>%
+  as_tibble() %>%
+  mutate(cluster = km.res$cluster,
+         cpnd = row.names(slope_clust.short.2t)) %>%
+  ggplot(aes(RI.scaled, inverse_slope.avg.scaled, color = factor(cluster), label = cpnd)) +
+  geom_text()
+
+slope_clust.short.2$cluster <- as.factor(km.res$cluster)
+
+```
+
+Predicting which cluster things will fall into
+
+```{r}
+set.seed(56)
+split.c = sample.split(slope_clust.short.2$cluster, SplitRatio = 0.8)
+
+# what is a split?
+clust.train <- filter(slope_clust.short.2, split.c == TRUE)  # is split a variable in loans?
+clust.train.n <- clust.train %>% 
+  dplyr::select(cpnd, cluster) %>% 
+  left_join(slope_clust.short.2a) %>%
+  left_join(wide_losses, by = c("cpnd" = "names_losses")) %>% 
+  left_join(wide_mz_i, by = c("cpnd" = "Name")) 
+
+clust.train.n.rf <- clust.train.n %>% 
+  dplyr::select(-c(cpnd, inverse_slope.avg)) %>% 
+  filter(!is.na(loss__1))
+
+
+
+
+  
+  
+clust.test <- filter(slope_clust.short.2, split.c == FALSE)
+clust.test.n <- clust.test %>% 
+  dplyr::select(cpnd, cluster) %>% 
+  left_join(slope_clust.short.2a) %>%
+  left_join(wide_losses, by = c("cpnd" = "names_losses")) %>% 
+  left_join(wide_mz_i, by = c("cpnd" = "Name")) 
+
+```
+Now doing rf prediction on which cluster
+```{r}
+set.seed(111)
+train.rf.c <- train(cluster ~ .,
+                  data = clust.train.n.rf,
+                  method = "rf",
+                  tuneGrid = data.frame(mtry=3:40),
+                  trControl = trainControl(method="cv", number=5, verboseIter = TRUE),
+                  metric = "Accuracy")
+# RMSE or Rsquared doesn't matter actually -- both will be generated for regression problems
+train.rf.c$results
+train.rf.c
+best.rf.c <- train.rf.c$finalModel
+best.rf.c
+```
+
+```{r}
+set.seed(110)
+rf.slopemod.c <- randomForest(cluster ~ ., data = clust.train.n.rf, mtry = 34, nodesize = 2, ntree = 5000)
+pred.best.rf.s.c <- predict(rf.slopemod.c, newdata = clust.test.n) # can use same model matrix
+pred.best.rf.s.train.c <- predict(rf.slopemod.c, newdata = clust.train.n.rf)
+
+table(pred.best.rf.s.c, clust.test.n$cluster)
+
+acc.t <- (3+9+7)/nrow(clust.test.n)
+```
+Now predicting slope from proxy cluster assignment
+thing2
+
+```{r}
+
+```
+
+
+
+
+Switching gears and trying good old fashioned linear modeling
+
+```{r}
+slopemod.train.lin <- slopemod.train %>% 
+  mutate(RI.round = as.numeric(RI.round.f)) %>% 
+  dplyr::select(slope.i, RI.round.f, Retention.II..sec., dates, loss__12, loss__14, mz__73, mz__55, mz__43, mz__69, mz__41, mz__57, mz__129, mz__117, mz__71, mz__85)
+
+slopemod.test.lin <- slopemod.test %>% 
+  dplyr::select(slope.i, RI.round.f, Retention.II..sec., dates, loss__12, loss__14, mz__73, mz__55, mz__43, mz__69, mz__41, mz__57, mz__129, mz__117, mz__71, mz__85)
+
+
+lm_s.1 <- lm(slope.i ~ ., data = slopemod.train.lin)
+summary(lm_s.1)
+
+predicted_lm_s.q <- predict(lm_s.1, slopemod.test)
+
+slopemod.test.lin$pred.lin <- predicted_lm_s.q
+
+slopemod.test.lin <- slopemod.test.lin %>% 
+  mutate(pcterr = 100*abs(pred.lin-slope.i)/slope.i)
+
+summary(slopemod.test.lin$pcterr)
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+# Old code dont use
 
 ```{r}
 ES_slopes_boosted <- ES.test.boost1
