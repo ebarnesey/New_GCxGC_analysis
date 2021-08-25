@@ -128,7 +128,7 @@ ES_table_ranked <- ES_table_trimmed %>%
   left_join(mz_tab) %>% 
   filter(freq_ranks< 41)
 
-ES_common_mz.t = ES_table_ranked %>%
+ES_common_mz = ES_table_ranked %>%
   dplyr::select(Name, mz, intensity) %>% 
   mutate(mz = paste("mz_", mz, sep = "_")) %>% 
   mutate(mz_obs = TRUE) %>% 
@@ -367,10 +367,10 @@ Now trying for accuracy in O:C
 ```{r}
 
 Cat.train.oc <- Cat.train %>% 
-  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat", "RT1", "Retention_index"))
 
 Cat.test.oc <- Cat.test %>% 
-  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat", "RT1", "Retention_index"))
 
 set.seed(144)
 train.rf = train(O_C_ratio ~., data = Cat.train.oc, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "RMSE", na.action = na.exclude)
@@ -401,7 +401,7 @@ summary(Cat.test.oc$pct_error_oc)
 
 Cat.test.oc.2$Name <- Cat.test$Name
 
-OSR2(pred.best.rf, Cat.train.oc$O_C_ratio, Cat.test.oc$O_C_ratio)
+#OSR2(pred.best.rf, Cat.train.oc$O_C_ratio, Cat.test.oc$O_C_ratio)
 
 Cat.test.oc %>% 
   ggplot(aes(x = O_C_ratio, y = O_C_ratio.p))+
@@ -431,13 +431,13 @@ Cat.train.form <- Cat.train %>%
   mutate(Nnum = 0) %>% 
   mutate(Snum = 0)
 
-for(i in 1:nrow(Cat.train.form){
+for(i in 1:nrow(Cat.train.form)){
   
-  i = 10
+  #i = 10
   form.t <- Cat.train.form$ChemFormula[i]
   
   form.t1 <- data.frame(makeup(form.t))
-  setDT(form.t1, keep.row(names = TRUE)[]
+  setDT(form.t1, keep.rownames = TRUE)[]
   names(form.t1)<- c("Element", "num")
   
   form.t2 <- d.e %>% 
@@ -446,7 +446,7 @@ for(i in 1:nrow(Cat.train.form){
   form.t3 <- data.frame(form.t2[,-1])
   rownames(form.t3) <- form.t2[,1]
   
-  form.t4 <- t(form.t3)
+  form.t4 <- data.frame(t(form.t3))
   names(form.t4) <-c("C", "H", "O", "N", "S")
   
   Cat.train.form$Cnum[i]= form.t4$C[1]
@@ -456,27 +456,71 @@ for(i in 1:nrow(Cat.train.form){
   Cat.train.form$Snum[i]= form.t4$S[1]
 }
 
+Cat.test.form <- Cat.test %>% 
+  mutate(Cnum = 0) %>% 
+  mutate(Hnum = 0) %>% 
+  mutate(Onum = 0) %>% 
+  mutate(Nnum = 0) %>% 
+  mutate(Snum = 0)
+
+for(i in 1:nrow(Cat.test.form)){
+  
+  #i = 10
+  form.t <- Cat.test.form$ChemFormula[i]
+  
+  form.t1 <- data.frame(makeup(form.t))
+  setDT(form.t1, keep.rownames = TRUE)[]
+  names(form.t1)<- c("Element", "num")
+  
+  form.t2 <- d.e %>% 
+    left_join0(form.t1)
+    
+  form.t3 <- data.frame(form.t2[,-1])
+  rownames(form.t3) <- form.t2[,1]
+  
+  form.t4 <- data.frame(t(form.t3))
+  names(form.t4) <-c("C", "H", "O", "N", "S")
+  
+  Cat.test.form$Cnum[i]= form.t4$C[1]
+  Cat.test.form$Hnum[i]= form.t4$H[1]
+  Cat.test.form$Onum[i]= form.t4$O[1]
+  Cat.test.form$Nnum[i]= form.t4$N[1]
+  Cat.test.form$Snum[i]= form.t4$S[1]
+}
+
+
 
 Cstar_params <- read_csv("C_star_params.csv")
-Cat.train.cs <- Cat.train %>% 
+Cat.train.form <- Cat.train.form %>% 
   left_join(Cstar_params) %>% 
-  mutate(cstar = )
-  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+  mutate(cstar = (n_0_c-Cnum)*b_c-(Onum*b_O)-2*((Cnum*Onum)/(Cnum+Onum))*b_CO-Nnum*b_N)
 
-Cat.test.cs <- Cat.test %>% 
-  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat"))
+Cat.train.cs <- Cat.train.form %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat", "O_C_ratio", "RT1", "RI.round", "RI.round.f", "Retention_index", "Cnum", "Hnum", "Onum",
+                   "Nnum", "Snum", "n_0_c", "b_c", "b_O", "b_CO", "b_N"))
 
+Cat.test.form <- Cat.test.form %>% 
+  left_join(Cstar_params) %>% 
+  mutate(cstar = (n_0_c-Cnum)*b_c-(Onum*b_O)-2*((Cnum*Onum)/(Cnum+Onum))*b_CO-Nnum*b_N)
+
+Cat.test.cs <- Cat.test.form %>% 
+  dplyr::select(-c("Func_group_cat", "Name", "ChemFormula", "Func_Group_Cat_3", "Haofei_cat", "Cstar_Cat", "O_C_ratio", "RT1", "RI.round", "RI.round.f", "Retention_index", "Cnum", "Hnum", "Onum",
+                   "Nnum", "Snum", "n_0_c", "b_c", "b_O", "b_CO", "b_N"))
+```
+
+
+```{r}
 set.seed(144)
-train.rf = train(O_C_ratio ~., data = Cat.train.oc, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "RMSE", na.action = na.exclude)
+train.rf = train(cstar ~., data = Cat.train.cs, method = "rf", tuneGrid = data.frame(mtry=seq(1, 45, 1)), trControl = trainControl(method = "cv", number = 5), metric = "RMSE", na.action = na.exclude)
 
 best.rf = train.rf$finalModel
 best.rf
 
 rf.plot <- ggplot(train.rf$results, aes(x=mtry, y=Rsquared)) + geom_line(lwd=2) +
-  ylab("Accuracy of Predictions")
+  ylab("R Squared of Predictions")
 rf.plot
 
-Cat.mm = as.data.frame(model.matrix(O_C_ratio ~., data = Cat.test.oc))
+Cat.mm = as.data.frame(model.matrix(cstar ~., data = Cat.test.cs))
 
 set.seed(144)
 pred.best.rf = predict(best.rf, newdata = Cat.mm, type = "class")
@@ -487,27 +531,29 @@ t_rf_all
 accuracy.rf = (t_rf_all[1,1]+t_rf_all[2,2]+t_rf_all[3,3]+t_rf_all[4,4])/nrow(Cat.test.oc)
 accuracy.rf 
 
-Cat.test.oc$O_C_ratio.p <- pred.best.rf
+Cat.test.cs$cstar.p <- pred.best.rf
 
-Cat.test.oc.2 <- Cat.test.oc %>% 
-  mutate(pct_error_oc = 100*(abs(O_C_ratio.p-O_C_ratio)/O_C_ratio))
-summary(Cat.test.oc$pct_error_oc)
+Cat.test.cs.2 <- Cat.test.cs %>% 
+  mutate(pct_error_cs = 100*(abs(cstar.p-cstar)/cstar))
+summary(Cat.test.cs$pct_error_oc)
 
-Cat.test.oc.2$Name <- Cat.test$Name
+Cat.test.cs.2$Name <- Cat.test$Name
 
-OSR2(pred.best.rf, Cat.train.oc$O_C_ratio, Cat.test.oc$O_C_ratio)
+#OSR2(pred.best.rf, Cat.train.cs$cstar, Cat.test.cs$cstar)
 
-Cat.test.oc %>% 
-  ggplot(aes(x = O_C_ratio, y = O_C_ratio.p))+
+Cat.test.cs %>% 
+  ggplot(aes(x = cstar, y = cstar.p))+
   geom_point()+
-  xlab("O:C")+
-  ylab("O:C Predicted")
+  xlab("log cstar")+
+  ylab("log cstar predicted")
 
-CHONS()
+
 
 
 ```
+Predict ch cho chon chons
 
+use volatility basis set- Donahue 2012
 
 
 ```{r, eval=FALSE, echo=FALSE}
@@ -2048,6 +2094,18 @@ rf_pcterr_comparison <- rf_testcomp_full.lim %>%
 
 summary(rf_pcterr_comparison$slope_pcterr_fromclosest.i.p.signed)
 summary(rf_pcterr_comparison$pcterror.signed)
+
+
+line <- data.frame(x = c(0, 15000), y = c(0, 15000))
+
+rf_pcterr_comparison %>% 
+  ggplot(aes(x = slopemod.test.slope.i, y = pred.best.rf.s))+
+  geom_point(color = "blue")+
+  geom_point(aes(x= slopemod.test.slope.i, y = slope_fromclosest.i.p))+
+  geom_line(data = line, aes(x= x, y = y), color = "green")+
+  xlab("Real Slope")+
+  ylab("Predicted Slope")
+
 
 rf_pcterr_comparison %>% 
   ggplot()+
